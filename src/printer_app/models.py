@@ -53,6 +53,11 @@ class CrewdayConfig:
 
 
 @dataclass(frozen=True)
+class PrintScheduleConfig:
+    cron: str
+
+
+@dataclass(frozen=True)
 class WorkerConfig:
     name: str
     schedule: str
@@ -66,6 +71,7 @@ class AppConfig:
     ui: UIConfig
     printer: PrinterConfig
     crewday: CrewdayConfig
+    print_schedule: PrintScheduleConfig
     workers: tuple[WorkerConfig, ...]
 
 

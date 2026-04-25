@@ -81,6 +81,11 @@
           <span class="stat__value">{% if config.printer.cut %}Enabled{% else %}Disabled{% endif %}</span>
           <span class="stat__hint">{{ config.workers|length }} worker{% if config.workers|length != 1 %}s{% endif %} configured</span>
         </div>
+        <div class="stat {% if config.print_schedule.cron %}stat--sky{% else %}stat--rust{% endif %}">
+          <span class="stat__label">Schedule</span>
+          <span class="stat__value">{% if config.print_schedule.cron %}Configured{% else %}Off{% endif %}</span>
+          <span class="stat__hint stat__value--mono">{% if config.print_schedule.cron %}{{ config.print_schedule.cron }}{% else %}no automatic print{% endif %}</span>
+        </div>
       </section>
 
       <div class="grid">
@@ -182,6 +187,28 @@
                   <span>Send speed command</span>
                 </label>
               </div>
+
+              <h3 class="section-title">Automatic print</h3>
+              <label class="field">
+                <span class="field__label">Cron schedule</span>
+                <input
+                  class="input input--mono"
+                  id="print-schedule-cron"
+                  name="print_schedule_cron"
+                  value="{{ config.print_schedule.cron }}"
+                  placeholder="Leave empty to disable">
+                <span class="field__hint">Five-field cron. Empty means no automatic print.</span>
+              </label>
+              <details class="helper">
+                <summary>Examples</summary>
+                <div class="example-grid" aria-label="Cron examples">
+                  <button type="button" class="example" data-cron="">Off</button>
+                  <button type="button" class="example" data-cron="0 8 * * *">Every day at 08:00</button>
+                  <button type="button" class="example" data-cron="0 8 * * 1-5">Weekdays at 08:00</button>
+                  <button type="button" class="example" data-cron="0 7,13 * * *">07:00 and 13:00</button>
+                  <button type="button" class="example" data-cron="*/30 8-18 * * *">Every 30 min, 08-18</button>
+                </div>
+              </details>
             </div>
 
             <div class="btn-group btn-group--end">
@@ -383,6 +410,16 @@
         }
 
         select.addEventListener("change", applyProfile);
+      })();
+      (function () {
+        var target = document.getElementById("print-schedule-cron");
+        if (!target) return;
+        document.querySelectorAll("[data-cron]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            target.value = button.getAttribute("data-cron") || "";
+            target.focus();
+          });
+        });
       })();
     </script>
   </body>

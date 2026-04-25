@@ -50,6 +50,21 @@ PRINTER_UI_PASSWORD=change-me docker compose up dev
 
 Then open <http://127.0.0.1:8087>.
 
+Print all configured workers through the REST API:
+
+```sh
+curl -u admin:admin -X POST http://127.0.0.1:8087/api/receipts/print
+```
+
+Print selected workers:
+
+```sh
+curl -u admin:admin \
+  -H 'Content-Type: application/json' \
+  -d '{"workers":["Vincent"]}' \
+  http://127.0.0.1:8087/api/receipts/print
+```
+
 Run tests, linting, and formatting through uv inside Docker:
 
 ```sh

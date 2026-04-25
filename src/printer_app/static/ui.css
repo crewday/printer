@@ -401,6 +401,10 @@ select {
   font-feature-settings: "tnum";
   transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
+.input--mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+}
 .input:hover,
 input:hover { border-color: var(--ink-4); }
 .input:focus,
@@ -455,6 +459,38 @@ select {
   font-size: 12px;
   color: var(--ink-2);
   background: var(--card);
+}
+
+.helper {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-2);
+  padding: 10px 12px;
+}
+.helper summary {
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.example-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.example {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: 500 12.5px/1.2 "Inter Tight", sans-serif;
+  padding: 8px 10px;
+}
+.example:hover {
+  background: var(--paper-3);
+  color: var(--ink);
 }
 
 /* Inline checkbox row */

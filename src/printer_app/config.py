@@ -9,10 +9,12 @@ from typing import Any
 import yaml
 
 from printer_app import escpos
+from printer_app.cron import validate_cron_or_empty
 from printer_app.models import (
     AppConfig,
     CrewdayConfig,
     PrinterConfig,
+    PrintScheduleConfig,
     UIConfig,
     WorkerConfig,
 )
@@ -41,6 +43,9 @@ def default_config() -> dict[str, Any]:
             "api_token": crewday_token,
             "workspace_id": None,
         },
+        "print_schedule": {
+            "cron": "",
+        },
         "printer": {
             "type": "network_escpos",
             "profile": profile.id,
@@ -59,7 +64,7 @@ def default_config() -> dict[str, Any]:
         "workers": [
             {
                 "name": "Vincent",
-                "schedule": "0 8 * * *",
+                "schedule": "",
                 "crewday_user_id": None,
                 "timezone": "Asia/Dubai",
                 "tasks": [
@@ -90,6 +95,7 @@ def load_config(path: Path) -> AppConfig:
 def parse_config(raw: dict[str, Any]) -> AppConfig:
     ui_raw = raw.get("ui") or {}
     crewday_raw = raw.get("crewday") or {}
+    print_schedule_raw = raw.get("print_schedule") or {}
     printer_raw = raw.get("printer") or {}
     workers_raw = raw.get("workers") or []
 
@@ -108,6 +114,10 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         api_token=os.environ.get("CREWDAY_API_TOKEN") or crewday_raw.get("api_token"),
         workspace_id=crewday_raw.get("workspace_id"),
     )
+    print_schedule = PrintScheduleConfig(
+        cron=str(print_schedule_raw.get("cron", "")).strip(),
+    )
+    validate_cron_or_empty(print_schedule.cron)
     profile_id = str(printer_raw.get("profile", default_profile().id))
     profile = get_profile(profile_id) or default_profile()
     printer = PrinterConfig(
@@ -137,15 +147,20 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     workers = tuple(
         WorkerConfig(
             name=str(worker["name"]),
-            schedule=str(worker.get("schedule", "0 8 * * *")),
+            schedule=str(worker.get("schedule", "")),
             crewday_user_id=worker.get("crewday_user_id"),
             timezone=str(worker.get("timezone", "Asia/Dubai")),
             tasks=tuple(str(task) for task in worker.get("tasks", [])),
         )
         for worker in workers_raw
     )
-    return AppConfig(ui=ui, crewday=crewday, printer=printer, workers=workers)
-
+    return AppConfig(
+        ui=ui,
+        crewday=crewday,
+        print_schedule=print_schedule,
+        printer=printer,
+        workers=workers,
+    )
 
 def validate_printer_config(printer: PrinterConfig) -> None:
     if printer.type != "network_escpos":
@@ -191,6 +206,7 @@ def config_to_raw(config: AppConfig) -> dict[str, Any]:
     return {
         "ui": asdict(config.ui),
         "crewday": asdict(config.crewday),
+        "print_schedule": asdict(config.print_schedule),
         "printer": asdict(config.printer),
         "workers": [asdict(worker) for worker in config.workers],
     }

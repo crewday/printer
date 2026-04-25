@@ -6,6 +6,8 @@ crewday:
   base_url: http://crewday:8000
   api_token: null
   workspace_id: null
+print_schedule:
+  cron: ''
 printer:
   type: network_escpos
   profile: epson_tm_t20ii
@@ -13,7 +15,7 @@ printer:
   port: 9100
   timeout_seconds: 5.0
   paper_columns: 48
-  code_page: cp858
+  code_page: cp1252
   image_logo: true
   supports_print_density: true
   supports_print_speed: true
@@ -22,7 +24,7 @@ printer:
   cut: true
 workers:
 - name: Vincent
-  schedule: 0 8 * * *
+  schedule: ''
   crewday_user_id: null
   timezone: Asia/Dubai
   tasks:
