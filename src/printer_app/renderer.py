@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
@@ -14,7 +15,6 @@ from printer_app import escpos
 from printer_app.models import PrinterConfig, ReceiptTask, TaskBatch
 
 BRAND = "crew.day"
-RECEIPT_TITLE = "TASK LIST"
 RULE_THICKNESS_DOTS = 2
 TASK_INDENT = "  "
 CHECKBOX_MARK = "[ ] "
@@ -22,8 +22,12 @@ CHECKBOX_CONTINUATION = "    "
 LOGO_MAX_WIDTH_DOTS = 384
 LOGO_DOTS_PER_COLUMN = 8
 RULE_DOTS_PER_COLUMN = 12
-TEXT_CELL_WIDTH_DOTS = RULE_DOTS_PER_COLUMN
-TEXT_CELL_HEIGHT_DOTS = 24
+FONT_A_CELL_WIDTH_DOTS = RULE_DOTS_PER_COLUMN
+FONT_A_CELL_HEIGHT_DOTS = 24
+FONT_B_CELL_WIDTH_DOTS = 9
+FONT_B_CELL_HEIGHT_DOTS = 20
+TEXT_CELL_WIDTH_DOTS = FONT_A_CELL_WIDTH_DOTS
+TEXT_CELL_HEIGHT_DOTS = FONT_A_CELL_HEIGHT_DOTS
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,14 @@ class ReceiptPreview:
     height_dots: int
 
 
+@dataclass(frozen=True)
+class PreviewFont:
+    regular: ImageFont.ImageFont
+    bold: ImageFont.ImageFont
+    cell_width_dots: int
+    cell_height_dots: int
+
+
 def render_receipt(batch: TaskBatch, printer: PrinterConfig, now: datetime) -> bytes:
     columns = printer.paper_columns
     output = bytearray()
@@ -53,16 +65,26 @@ def render_receipt(batch: TaskBatch, printer: PrinterConfig, now: datetime) -> b
     output += escpos.command(escpos.ESC, b"a", b"\x01")
     if printer.image_logo:
         output += _logo_bytes(columns)
-    output += escpos.text("", printer.code_page)
-    output += escpos.command(escpos.ESC, b"E", b"\x01")
-    output += escpos.centered(RECEIPT_TITLE, columns, printer.code_page)
-    output += escpos.command(escpos.ESC, b"E", b"\x00")
-    output += _rule(columns, printer.code_page)
 
+    output += _render_centered_text(
+        _receipt_heading(batch, now),
+        columns,
+        printer.code_page,
+        font="b",
+        width=2,
+        height=2,
+        bold=True,
+    )
+
+    output += _render_centered_text(
+        _printed_on_line(now),
+        columns,
+        printer.code_page,
+        font="b",
+    )
+    output += _rule(columns, printer.code_page)
     output += escpos.command(escpos.ESC, b"a", b"\x00")
-    output += _render_lines(_metadata_lines(batch, now, columns), printer.code_page)
-    output += _rule(columns, printer.code_page)
-
+    output += escpos.select_font("a")
     if batch.tasks:
         for index, task in enumerate(batch.tasks, start=1):
             output += _render_task(index, task, columns, printer.code_page)
@@ -70,10 +92,10 @@ def render_receipt(batch: TaskBatch, printer: PrinterConfig, now: datetime) -> b
         output += escpos.text("No tasks for this print window.", printer.code_page)
         output += escpos.text("", printer.code_page)
 
-    output += _rule(columns, printer.code_page)
+    output += _rule(columns, printer.code_page, trailing_blank=False)
     output += escpos.command(escpos.ESC, b"a", b"\x01")
-    output += escpos.text(BRAND, printer.code_page)
-    output += escpos.text("", printer.code_page)
+    if printer.image_logo:
+        output += _logo_bytes(columns, scale=0.5)
     output += escpos.text("", printer.code_page)
 
     if printer.cut:
@@ -280,9 +302,8 @@ def _bitmap_test_bytes() -> bytes:
 def receipt_text_preview(batch: TaskBatch, now: datetime, columns: int) -> str:
     lines = [
         BRAND.center(columns),
-        RECEIPT_TITLE.center(columns),
-        _preview_rule(columns),
-        *_metadata_lines(batch, now, columns),
+        _receipt_heading(batch, now).center(columns),
+        _printed_on_line(now).center(columns),
         _preview_rule(columns),
     ]
     for index, task in enumerate(batch.tasks, start=1):
@@ -306,16 +327,18 @@ def _render_task(index: int, task: ReceiptTask, columns: int, code_page: str) ->
     return bytes(output)
 
 
-def _rule(columns: int, code_page: str) -> bytes:
-    return (
+def _rule(columns: int, code_page: str, *, trailing_blank: bool = True) -> bytes:
+    output = (
         escpos.command(escpos.ESC, b"a", b"\x00")
         + escpos.horizontal_rule(
             columns,
             dots_per_column=RULE_DOTS_PER_COLUMN,
             thickness_dots=RULE_THICKNESS_DOTS,
         )
-        + escpos.text("", code_page)
     )
+    if trailing_blank:
+        output += escpos.text("", code_page)
+    return output
 
 
 def _task_preview_lines(index: int, task: ReceiptTask, columns: int) -> list[str]:
@@ -343,6 +366,43 @@ def _metadata_lines(batch: TaskBatch, now: datetime, columns: int) -> tuple[str,
         *_label_lines("Printed", now.strftime("%Y-%m-%d %H:%M %Z"), columns),
         *_label_lines("Source", batch.source_label, columns),
     )
+
+
+def _receipt_heading(batch: TaskBatch, now: datetime) -> str:
+    return f"{batch.worker_name}, {_display_date(now)}"
+
+
+def _printed_on_line(now: datetime) -> str:
+    return f"Printed on {_display_datetime(now)}"
+
+
+def _display_date(value: datetime) -> str:
+    return f"{value.strftime('%B')} {_ordinal(value.day)}, {value:%Y}"
+
+
+def _display_datetime(value: datetime) -> str:
+    return f"{_display_date(value)} {value:%H:%M:%S} {_timezone_offset(value)}"
+
+
+def _ordinal(day: int) -> str:
+    if 10 <= day % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
+def _timezone_offset(value: datetime) -> str:
+    offset = value.utcoffset()
+    if offset is None:
+        return ""
+    total_minutes = math.floor(offset.total_seconds() / 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    total_minutes = abs(total_minutes)
+    hours, minutes = divmod(total_minutes, 60)
+    if minutes:
+        return f"{sign}{hours:02d}:{minutes:02d}"
+    return f"{sign}{hours:02d}"
 
 
 def _task_meta(task: ReceiptTask) -> str:
@@ -393,6 +453,37 @@ def _render_lines(lines: tuple[str, ...], code_page: str) -> bytes:
     return b"".join(escpos.text(line, code_page) for line in lines)
 
 
+def _render_centered_text(
+    value: str,
+    columns: int,
+    code_page: str,
+    *,
+    font: str = "a",
+    width: int = 1,
+    height: int = 1,
+    bold: bool = False,
+) -> bytes:
+    max_chars = _font_columns(columns, font, width)
+    lines = _wrapped(value, max_chars)
+    output = bytearray()
+    output += escpos.command(escpos.ESC, b"a", b"\x01")
+    output += escpos.select_font(font)
+    output += escpos.select_text_size(width=width, height=height)
+    output += escpos.bold(bold)
+    output += _render_lines(tuple(lines), code_page)
+    output += escpos.bold(False)
+    output += escpos.select_text_size()
+    return bytes(output)
+
+
+def _font_columns(columns: int, font: str, width_multiplier: int = 1) -> int:
+    cell_width = (
+        FONT_B_CELL_WIDTH_DOTS if font.lower() == "b" else FONT_A_CELL_WIDTH_DOTS
+    )
+    width_dots = columns * FONT_A_CELL_WIDTH_DOTS
+    return max(1, width_dots // (cell_width * width_multiplier))
+
+
 def _wrapped(value: str, columns: int) -> list[str]:
     return wrap(value, width=columns, break_long_words=False) or [""]
 
@@ -407,9 +498,12 @@ def _escpos_payload_to_image(
     columns: int,
     code_page: str,
 ) -> Image.Image:
-    font, bold_font, text_height = _preview_fonts()
+    fonts = _preview_fonts()
     alignment = 0
     bold = False
+    font_name = "a"
+    width_multiplier = 1
+    height_multiplier = 1
     y = 0
     strips: list[tuple[int, Image.Image]] = []
     text_buffer = bytearray()
@@ -420,13 +514,23 @@ def _escpos_payload_to_image(
             return
         line = bytes(text_buffer).decode(code_page, errors="replace")
         text_buffer.clear()
+        preview_font = fonts[font_name]
         strip = _text_line_to_image(
             line,
-            bold_font if bold else font,
+            preview_font.bold if bold else preview_font.regular,
             columns,
-            text_height,
+            preview_font.cell_width_dots,
+            preview_font.cell_height_dots,
+            width_multiplier,
+            height_multiplier,
         )
-        x = _aligned_x(width_dots, _text_content_width(line, columns), alignment)
+        content_width = _text_content_width(
+            line,
+            columns,
+            preview_font.cell_width_dots,
+            width_multiplier,
+        )
+        x = _aligned_x(width_dots, content_width, alignment)
         strips.append((x, strip))
         y += strip.height
 
@@ -441,16 +545,27 @@ def _escpos_payload_to_image(
         if byte == 0x1B and i + 1 < len(payload):
             command = payload[i + 1]
             if command == 0x40:
+                flush_text()
                 alignment = 0
                 bold = False
+                font_name = "a"
+                width_multiplier = 1
+                height_multiplier = 1
                 i += 2
                 continue
             if command == 0x61 and i + 2 < len(payload):
+                flush_text()
                 alignment = payload[i + 2]
                 i += 3
                 continue
             if command == 0x45 and i + 2 < len(payload):
+                flush_text()
                 bold = payload[i + 2] != 0
+                i += 3
+                continue
+            if command == 0x4D and i + 2 < len(payload):
+                flush_text()
+                font_name = "b" if payload[i + 2] == 1 else "a"
                 i += 3
                 continue
             if command == 0x74 and i + 2 < len(payload):
@@ -485,6 +600,13 @@ def _escpos_payload_to_image(
             if command == 0x42 and i + 2 < len(payload):
                 i += 3
                 continue
+            if command == 0x21 and i + 2 < len(payload):
+                flush_text()
+                size = payload[i + 2]
+                width_multiplier = ((size >> 4) & 0x07) + 1
+                height_multiplier = (size & 0x07) + 1
+                i += 3
+                continue
             if command == 0x56:
                 i += 4 if i + 3 < len(payload) else 2
                 continue
@@ -502,36 +624,82 @@ def _escpos_payload_to_image(
     return preview
 
 
-def _preview_fonts() -> tuple[ImageFont.FreeTypeFont, ImageFont.FreeTypeFont, int]:
+def _preview_fonts() -> dict[str, PreviewFont]:
     try:
-        return (
-            ImageFont.truetype("DejaVuSansMono.ttf", 18),
-            ImageFont.truetype("DejaVuSansMono-Bold.ttf", 18),
-            TEXT_CELL_HEIGHT_DOTS,
-        )
+        font_a = ImageFont.truetype("DejaVuSansMono.ttf", 18)
+        bold_a = ImageFont.truetype("DejaVuSansMono-Bold.ttf", 18)
+        font_b = ImageFont.truetype("DejaVuSansMono.ttf", 14)
+        bold_b = ImageFont.truetype("DejaVuSansMono-Bold.ttf", 14)
     except OSError:
-        font = ImageFont.load_default(size=18)
-        return font, font, TEXT_CELL_HEIGHT_DOTS
+        font_a = ImageFont.load_default(size=18)
+        bold_a = font_a
+        font_b = ImageFont.load_default(size=14)
+        bold_b = font_b
+    return {
+        "a": PreviewFont(
+            regular=font_a,
+            bold=bold_a,
+            cell_width_dots=FONT_A_CELL_WIDTH_DOTS,
+            cell_height_dots=FONT_A_CELL_HEIGHT_DOTS,
+        ),
+        "b": PreviewFont(
+            regular=font_b,
+            bold=bold_b,
+            cell_width_dots=FONT_B_CELL_WIDTH_DOTS,
+            cell_height_dots=FONT_B_CELL_HEIGHT_DOTS,
+        ),
+    }
 
 
 def _text_line_to_image(
     line: str,
     font: ImageFont.ImageFont,
     columns: int,
-    text_height: int,
+    cell_width_dots: int,
+    cell_height_dots: int,
+    width_multiplier: int,
+    height_multiplier: int,
 ) -> Image.Image:
-    strip = Image.new("L", (columns * TEXT_CELL_WIDTH_DOTS, text_height), 255)
-    draw = ImageDraw.Draw(strip)
-    for col, char in enumerate(line[:columns]):
-        x = col * TEXT_CELL_WIDTH_DOTS
+    max_chars = _preview_text_columns(columns, cell_width_dots, width_multiplier)
+    base = Image.new(
+        "L",
+        (max_chars * cell_width_dots, cell_height_dots),
+        255,
+    )
+    draw = ImageDraw.Draw(base)
+    for col, char in enumerate(line[:max_chars]):
+        x = col * cell_width_dots
         draw.text((x, 1), char, font=font, fill=0)
-    return strip
+    if width_multiplier == 1 and height_multiplier == 1:
+        return base
+    return base.resize(
+        (base.width * width_multiplier, base.height * height_multiplier),
+        Image.Resampling.NEAREST,
+    )
 
 
-def _text_content_width(line: str, columns: int) -> int:
+def _preview_text_columns(
+    columns: int,
+    cell_width_dots: int,
+    width_multiplier: int,
+) -> int:
+    width_dots = columns * FONT_A_CELL_WIDTH_DOTS
+    return max(1, width_dots // (cell_width_dots * width_multiplier))
+
+
+def _text_content_width(
+    line: str,
+    columns: int,
+    cell_width_dots: int,
+    width_multiplier: int,
+) -> int:
     if not line:
         return 0
-    return min(len(line), columns) * TEXT_CELL_WIDTH_DOTS
+    visible_chars = min(
+        len(line),
+        _preview_text_columns(columns, cell_width_dots, width_multiplier),
+    )
+    return visible_chars * cell_width_dots * width_multiplier
 
 
 def _raster_bytes_to_image(data: bytes, width_bytes: int, height: int) -> Image.Image:
@@ -555,9 +723,10 @@ def _aligned_x(width_dots: int, content_width: int, alignment: int) -> int:
     return 0
 
 
-@lru_cache(maxsize=8)
-def _logo_bytes(columns: int) -> bytes:
-    width = min(columns * LOGO_DOTS_PER_COLUMN, LOGO_MAX_WIDTH_DOTS)
+@lru_cache(maxsize=16)
+def _logo_bytes(columns: int, scale: float = 1.0) -> bytes:
+    max_width = min(columns * LOGO_DOTS_PER_COLUMN, LOGO_MAX_WIDTH_DOTS)
+    width = max(1, round(max_width * scale))
     png = cairosvg.svg2png(
         url=str(files("printer_app").joinpath("assets/crewday-logo.svg")),
         output_width=width,

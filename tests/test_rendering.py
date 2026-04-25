@@ -44,9 +44,11 @@ def test_receipt_preview_contains_required_fields() -> None:
 
     preview = receipt_text_preview(batch, now, 48)
 
-    assert "Worker: Vincent" in preview
-    assert "Printed: 2026-04-25 08:30 +04" in preview
+    assert "Vincent, April 25th, 2026" in preview
+    assert "Printed on April 25th, 2026 08:30:00 +04" in preview
     assert "Prepare Villa Sud" in preview
+    assert "TASK LIST" not in preview
+    assert "Source:" not in preview
 
 
 def test_receipt_renders_escpos_bytes_with_logo_and_cut() -> None:
@@ -61,8 +63,15 @@ def test_receipt_renders_escpos_bytes_with_logo_and_cut() -> None:
     payload = render_receipt(batch, _printer(), now)
 
     assert payload.startswith(b"\x1b@")
-    assert b"TASK LIST" in payload
+    assert b"TASK LIST" not in payload
+    assert b"Source:" not in payload
+    assert b"Vincent, April 25th, 2026" in payload
+    assert b"Printed on April 25th, 2026 08:30:00 +04" in payload
+    assert b"\x1bM\x01" in payload
+    assert b"\x1d!\x11" in payload
+    assert b"\x1d!\x00" in payload
     assert b"Prepare Villa Sud" in payload
+    assert payload.count(b"\x1dv0") >= 3
     assert payload.endswith(b"\x1dVA\x03")
 
 

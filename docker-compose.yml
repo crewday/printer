@@ -12,6 +12,9 @@ services:
       PRINTER_CONFIG: /config/printer.yaml
       PRINTER_UI_USERNAME: admin
       PRINTER_UI_PASSWORD: admin
+      # Process-local timezone for container code that asks the OS for local time.
+      # Receipt task times come from workers[].timezone in /config/printer.yaml.
+      TZ: ${TZ:-Asia/Dubai}
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
     ports:
@@ -30,6 +33,9 @@ services:
       PRINTER_CONFIG: /config/printer.yaml
       PRINTER_UI_USERNAME: admin
       PRINTER_UI_PASSWORD: admin
+      # Process-local timezone for container code that asks the OS for local time.
+      # Receipt task times come from workers[].timezone in /config/printer.yaml.
+      TZ: ${TZ:-Asia/Dubai}
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
     ports:
