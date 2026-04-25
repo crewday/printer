@@ -13,7 +13,7 @@ def test_ensure_config_creates_yaml(tmp_path: Path) -> None:
 
     config = load_config(path)
     assert config.printer.profile == "epson_tm_t20ii"
-    assert config.printer.code_page == "cp437"
+    assert config.printer.code_page == "cp858"
     assert config.printer.image_logo is True
     assert config.printer.supports_print_density is True
     assert config.printer.supports_print_speed is True
@@ -85,7 +85,7 @@ workers:
     config = load_config(path)
 
     assert config.printer.paper_columns == 48
-    assert config.printer.code_page == "cp437"
+    assert config.printer.code_page == "cp858"
     assert config.printer.cut is True
 
 

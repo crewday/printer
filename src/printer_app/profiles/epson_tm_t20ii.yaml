@@ -3,6 +3,9 @@ description: Tested 80 mm network ESC/POS receipt printer.
 paper_width: 80 mm
 cut_behavior: Full or partial cut, controlled by the printer firmware.
 code_pages:
+  - cp858
+  - cp850
+  - cp1252
   - cp437
 image_logo: true
 supports_print_density: true

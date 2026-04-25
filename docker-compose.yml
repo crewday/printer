@@ -10,8 +10,8 @@ services:
     environment:
       PYTHONPATH: /app/src
       PRINTER_CONFIG: /config/printer.yaml
-      PRINTER_UI_USERNAME: ${PRINTER_UI_USERNAME:-admin}
-      PRINTER_UI_PASSWORD: ${PRINTER_UI_PASSWORD:-}
+      PRINTER_UI_USERNAME: admin
+      PRINTER_UI_PASSWORD: admin
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
     ports:
@@ -28,8 +28,8 @@ services:
     environment:
       PYTHONPATH: /app/src
       PRINTER_CONFIG: /config/printer.yaml
-      PRINTER_UI_USERNAME: ${PRINTER_UI_USERNAME:-admin}
-      PRINTER_UI_PASSWORD: ${PRINTER_UI_PASSWORD:-}
+      PRINTER_UI_USERNAME: admin
+      PRINTER_UI_PASSWORD: admin
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
     ports:

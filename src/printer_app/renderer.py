@@ -153,6 +153,95 @@ def render_black_test(printer: PrinterConfig) -> bytes:
     return bytes(output)
 
 
+def render_font_test(printer: PrinterConfig) -> bytes:
+    columns = printer.paper_columns
+    output = bytearray()
+
+    output += escpos.command(escpos.ESC, b"@")
+    output += escpos.select_code_page(printer.code_page)
+    if printer.supports_print_density:
+        output += escpos.select_print_density(printer.print_density)
+    if printer.supports_print_speed:
+        output += escpos.select_print_speed(printer.print_speed)
+
+    output += escpos.command(escpos.ESC, b"a", b"\x01")
+    output += escpos.bold(True)
+    output += escpos.select_text_size(width=2, height=2)
+    output += escpos.text("FONT TEST", printer.code_page)
+    output += escpos.select_text_size()
+    output += escpos.bold(False)
+    output += escpos.text("", printer.code_page)
+
+    output += escpos.command(escpos.ESC, b"a", b"\x00")
+    output += escpos.text(
+        f"Profile: {printer.profile}  Code page: {printer.code_page}",
+        printer.code_page,
+    )
+    output += escpos.text(
+        f"Columns: {columns}  Density: {printer.print_density}  Speed: "
+        f"{printer.print_speed}",
+        printer.code_page,
+    )
+    output += _rule(columns, printer.code_page)
+
+    output += escpos.select_font("a")
+    output += escpos.text(
+        "Font A normal: The quick brown fox 0123456789",
+        printer.code_page,
+    )
+    output += escpos.select_font("b")
+    output += escpos.text(
+        "Font B normal: The quick brown fox 0123456789",
+        printer.code_page,
+    )
+    output += escpos.select_font("a")
+    output += escpos.text("", printer.code_page)
+
+    output += escpos.bold(True)
+    output += escpos.text("Bold: heavier task headings", printer.code_page)
+    output += escpos.bold(False)
+    output += escpos.underline(1)
+    output += escpos.text("Underline 1-dot: labels and warnings", printer.code_page)
+    output += escpos.underline(2)
+    output += escpos.text("Underline 2-dot: stronger emphasis", printer.code_page)
+    output += escpos.underline(0)
+    output += escpos.text("", printer.code_page)
+
+    for width, height, label in (
+        (2, 1, "Double width"),
+        (1, 2, "Double height"),
+        (2, 2, "Double width + height"),
+    ):
+        output += escpos.select_text_size(width=width, height=height)
+        output += escpos.text(label, printer.code_page)
+        output += escpos.select_text_size()
+        output += escpos.text(f"normal reset after {label.lower()}", printer.code_page)
+
+    output += escpos.text("", printer.code_page)
+    output += escpos.command(escpos.ESC, b"a", b"\x01")
+    output += escpos.text("Centered text", printer.code_page)
+    output += escpos.command(escpos.ESC, b"a", b"\x02")
+    output += escpos.text("Right aligned text", printer.code_page)
+    output += escpos.command(escpos.ESC, b"a", b"\x00")
+    output += escpos.reverse_bar(columns, "REVERSE PRINT SAMPLE", printer.code_page)
+    output += escpos.text("", printer.code_page)
+    output += escpos.text("Symbols: # * + - / = @ [] {} <>", printer.code_page)
+    output += escpos.text(
+        "Accents: été à l'hôtel, déjà vu, façade, garçon, où, Noël, 12€",
+        printer.code_page,
+    )
+    output += escpos.text("", printer.code_page)
+    output += escpos.text("", printer.code_page)
+
+    output += escpos.select_font("a")
+    output += escpos.select_text_size()
+    output += escpos.bold(False)
+    output += escpos.underline(0)
+    if printer.cut:
+        output += escpos.cut()
+    return bytes(output)
+
+
 def receipt_text_preview(batch: TaskBatch, now: datetime, columns: int) -> str:
     lines = [
         BRAND.center(columns),

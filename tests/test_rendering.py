@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from printer_app.models import PrinterConfig, ReceiptTask, TaskBatch
 from printer_app.renderer import (
     receipt_text_preview,
+    render_font_test,
     render_receipt,
     render_receipt_preview,
 )
@@ -20,7 +21,7 @@ def _printer() -> PrinterConfig:
         port=9100,
         timeout_seconds=5,
         paper_columns=48,
-        code_page="cp437",
+        code_page="cp858",
         image_logo=True,
         supports_print_density=True,
         supports_print_speed=True,
@@ -101,6 +102,24 @@ def test_receipt_preview_uses_configured_print_width() -> None:
     assert preview.png.startswith(b"\x89PNG")
     assert preview.width_dots == 48 * 12
     assert preview.height_dots > 0
+
+
+def test_font_test_renders_escpos_feature_commands() -> None:
+    payload = render_font_test(_printer())
+
+    assert payload.startswith(b"\x1b@")
+    assert b"FONT TEST" in payload
+    assert b"\x1bM\x00" in payload
+    assert b"\x1bM\x01" in payload
+    assert b"\x1d!\x10" in payload
+    assert b"\x1d!\x01" in payload
+    assert b"\x1d!\x11" in payload
+    assert b"\x1b-\x01" in payload
+    assert b"\x1b-\x02" in payload
+    assert b"\x1dB\x01" in payload
+    assert "été à l'hôtel".encode("cp858") in payload
+    assert "12€".encode("cp858") in payload
+    assert payload.endswith(b"\x1dVA\x03")
 
 
 def test_logo_raster_is_not_solid_black() -> None:

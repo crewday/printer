@@ -7,6 +7,8 @@ This repository builds a Docker-hosted service that prints worker task lists fro
 - Do not run project runtime or toolchain commands directly on the host.
 - Use Docker for anything that installs or runs project dependencies, including Python, uv/pip, CUPS, printer drivers, test runners, linters, app servers, schedulers, calibration commands, and printer commands.
 - Calibration, printer tests, config generation, and UI/server commands must run inside Docker.
+- `docker-compose.yml` is a local development entrypoint only and is not used for real deployments.
+- The Docker Compose UI login is intentionally fixed at `admin` / `admin` for local development.
 - Normal repository and shell operations may run on the host when they do not install or execute project dependencies. Examples: `find`, `rg`, `sed`, `git status`, `git diff`, `git commit`, and `git push`.
 - Host-side editing is allowed.
 - Target Python is Python 3.14.

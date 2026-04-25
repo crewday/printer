@@ -25,6 +25,7 @@ from printer_app.models import AppConfig, PrinterProfile
 from printer_app.profiles import get_profile, load_profiles
 from printer_app.renderer import (
     render_black_test,
+    render_font_test,
     render_receipt,
     render_receipt_preview,
 )
@@ -165,6 +166,22 @@ def black_test(
         _record(f"Black test failed: {exc}")
     else:
         _record(f"Printed black test with density={density} speed={speed}.")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/font-test")
+def font_test(_: Annotated[None, Depends(require_auth)]) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    payload = render_font_test(config.printer)
+    try:
+        send_to_network_printer(payload, config.printer)
+    except Exception as exc:
+        _record(f"Font test failed: {exc}")
+    else:
+        _record(
+            f"Printed font test to {config.printer.host}:{config.printer.port} "
+            f"with {config.printer.code_page}."
+        )
     return RedirectResponse("/", status_code=303)
 
 

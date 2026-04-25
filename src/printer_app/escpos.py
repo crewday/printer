@@ -29,6 +29,30 @@ def centered(line: str, columns: int, code_page: str = "cp437") -> bytes:
     return text(line[:columns].center(columns), code_page)
 
 
+def select_font(font: str) -> bytes:
+    fonts = {"a": 0, "b": 1}
+    return command(ESC, b"M", bytes([fonts[font.lower()]]))
+
+
+def select_text_size(width: int = 1, height: int = 1) -> bytes:
+    if not 1 <= width <= 8:
+        raise ValueError("text width multiplier must be between 1 and 8")
+    if not 1 <= height <= 8:
+        raise ValueError("text height multiplier must be between 1 and 8")
+    size = ((width - 1) << 4) | (height - 1)
+    return command(GS, b"!", bytes([size]))
+
+
+def bold(enabled: bool) -> bytes:
+    return command(ESC, b"E", b"\x01" if enabled else b"\x00")
+
+
+def underline(mode: int = 1) -> bytes:
+    if mode not in {0, 1, 2}:
+        raise ValueError("underline mode must be 0, 1, or 2")
+    return command(ESC, b"-", bytes([mode]))
+
+
 def select_print_density(density: int) -> bytes:
     return command(GS, b"(K", b"\x02\x00", b"\x31", bytes([density]))
 
