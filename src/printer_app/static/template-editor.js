@@ -40,7 +40,6 @@
   var palette  = document.getElementById("composer-palette");
   var dropzone = document.getElementById("composer-dropzone");
   var statusEl = document.getElementById("composer-status");
-  var countEl  = document.getElementById("composer-count");
   var dirtyEl  = document.getElementById("composer-dirty");
   var previewBtn = document.getElementById("composer-preview");
   var saveBtn    = document.getElementById("composer-save");
@@ -93,20 +92,10 @@
     var chip = dirtyEl.parentElement;
     if (isDirty()) {
       dirtyEl.textContent = "unsaved changes";
-      chip.classList.remove("chip--moss");
-      chip.classList.add("chip--sand");
-      chip.querySelector(".dot").className = "dot dot--sand";
+      chip.hidden = false;
     } else {
-      dirtyEl.textContent = "in sync with config";
-      chip.classList.remove("chip--sand");
-      chip.classList.add("chip--moss");
-      chip.querySelector(".dot").className = "dot dot--moss";
+      chip.hidden = true;
     }
-  }
-
-  function updateCount() {
-    var n = sections.length;
-    countEl.textContent = n + " block" + (n === 1 ? "" : "s");
   }
 
   // ── Palette ────────────────────────────────────────────────
@@ -185,7 +174,6 @@
 
   function renderDropzone() {
     dropzone.innerHTML = "";
-    updateCount();
 
     if (sections.length === 0) {
       var empty = document.createElement("div");
@@ -248,21 +236,24 @@
       cell.className = "block__cell block__cell--" + section.align;
     }
 
-    var icon = document.createElement("span");
-    icon.className = "block__icon block__icon--" + section.type;
-    icon.setAttribute("aria-hidden", "true");
-    icon.innerHTML = ICONS[section.type] || "";
-    cell.appendChild(icon);
-
     cell.appendChild(buildContent(section, index));
     body.appendChild(cell);
     return body;
+  }
+
+  function makeIcon(type) {
+    var icon = document.createElement("span");
+    icon.className = "block__icon block__icon--" + type;
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = ICONS[type] || "";
+    return icon;
   }
 
   function buildContent(section, index) {
     if (section.type === "text") {
       var pill = document.createElement("label");
       pill.className = "block__pill block__pill--input";
+      pill.appendChild(makeIcon("text"));
       var input = document.createElement("input");
       input.type = "text";
       input.value = section.value || "";
@@ -288,28 +279,32 @@
     if (section.type === "logo") {
       var p = document.createElement("span");
       p.className = "block__pill block__pill--logo";
+      p.appendChild(makeIcon("logo"));
       var pct = Math.round((section.scale || 1) * 100);
-      p.textContent = "crew.day · " + pct + "%";
+      p.appendChild(document.createTextNode("crew.day · " + pct + "%"));
       return p;
     }
 
     if (section.type === "separator") {
       var span = document.createElement("span");
       span.className = "block__pill block__pill--separator";
-      span.innerHTML = '<i class="block__rule-line"></i> separator <i class="block__rule-line"></i>';
+      span.appendChild(makeIcon("separator"));
+      span.appendChild(document.createTextNode("separator"));
       return span;
     }
 
     if (section.type === "tasks") {
       var t = document.createElement("span");
       t.className = "block__pill block__pill--tasks";
-      t.textContent = "↳ task list";
+      t.appendChild(makeIcon("tasks"));
+      t.appendChild(document.createTextNode("task list"));
       return t;
     }
 
     var b = document.createElement("span");
     b.className = "block__pill block__pill--blank";
-    b.textContent = "(blank line)";
+    b.appendChild(makeIcon("blank"));
+    b.appendChild(document.createTextNode("blank line"));
     return b;
   }
 
@@ -344,7 +339,17 @@
     remove.type = "button";
     remove.className = "mod mod--remove";
     remove.title = "Remove block";
-    remove.innerHTML = "✕";
+    remove.setAttribute("aria-label", "Remove block");
+    remove.innerHTML =
+      '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
+      'stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+      'stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M3 6h18"/>' +
+      '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>' +
+      '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' +
+      '<line x1="10" y1="11" x2="10" y2="17"/>' +
+      '<line x1="14" y1="11" x2="14" y2="17"/>' +
+      '</svg>';
     remove.addEventListener("click", function () { removeBlock(index); });
     dock.appendChild(remove);
 
@@ -576,5 +581,4 @@
   renderPalette();
   renderDropzone();
   setDirtyChip();
-  setStatus("Loaded current template from YAML config.");
 })();

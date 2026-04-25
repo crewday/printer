@@ -164,22 +164,6 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--line);
 }
 
-.page-topbar__leading {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px; height: 56px;
-  border-radius: 14px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--ink);
-  flex: 0 0 auto;
-  box-shadow: var(--shadow);
-}
-.page-topbar__leading .logo {
-  width: 34px; height: auto; display: block;
-}
-
 .page-topbar__heading { flex: 1 1 auto; min-width: 0; }
 .page-title {
   font-size: 1.95rem;
@@ -237,61 +221,10 @@ button { font-family: inherit; }
 [data-theme="dark"] .icon-btn .icon-btn__sun { display: block; }
 [data-theme="dark"] .icon-btn .icon-btn__moon { display: none; }
 
-/* Stats strip — at-a-glance state cards under the title */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-}
-.stat {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px 16px;
-  display: flex; flex-direction: column; gap: 4px;
-  position: relative;
-  overflow: hidden;
-}
-.stat::after {
-  content: "";
-  position: absolute; left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--moss);
-  opacity: 0.35;
-}
-.stat--sky::after  { background: var(--sky); }
-.stat--sand::after { background: var(--sand); }
-.stat--rust::after { background: var(--rust); }
-.stat__label {
-  font-family: "Fraunces", serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.stat__value {
-  font-family: "Inter Tight", sans-serif;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--ink);
-  font-feature-settings: "tnum";
-  word-break: break-word;
-}
-.stat__value--mono {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.92rem;
-  font-weight: 500;
-}
-.stat__hint {
-  font-size: 12px;
-  color: var(--ink-3);
-}
-
-/* Two-column desktop grid */
+/* Two-column desktop grid — equal halves so the page fits on an iPad Pro 11 (834px portrait) without horizontal scroll. */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 .grid__col {
@@ -301,7 +234,7 @@ button { font-family: inherit; }
   min-width: 0;
 }
 
-@media (max-width: 880px) {
+@media (max-width: 760px) {
   .grid { grid-template-columns: 1fr; }
 }
 
@@ -602,6 +535,7 @@ select {
   color: var(--ink-2);
   white-space: nowrap;
 }
+.chip[hidden] { display: none; }
 .chip--moss  { background: var(--moss-soft); color: var(--moss); }
 .chip--rust  { background: var(--rust-soft); color: var(--rust); }
 .chip--sand  { background: var(--sand-soft); color: #8A6A22; }
@@ -738,12 +672,9 @@ select {
 
 .composer__grid {
   display: grid;
-  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 16px;
   align-items: stretch;
-}
-@media (max-width: 720px) {
-  .composer__grid { grid-template-columns: 1fr; }
 }
 
 .composer__rail {
@@ -754,7 +685,6 @@ select {
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  min-height: 360px;
   position: relative;
 }
 .composer__rail--palette {
@@ -777,6 +707,7 @@ select {
 }
 .composer__rail--stage {
   background: var(--card);
+  min-height: 280px;
 }
 
 .composer__rail-head {
@@ -793,15 +724,6 @@ select {
   text-transform: uppercase;
   color: var(--ink-3);
 }
-.composer__rail-hint {
-  font-size: 11.5px;
-  color: var(--ink-3);
-  letter-spacing: 0.02em;
-}
-.composer__sep {
-  margin: 0 4px;
-  color: var(--ink-4);
-}
 .composer__rail-foot {
   font-size: 11.5px;
   color: var(--ink-3);
@@ -809,7 +731,6 @@ select {
   padding: 6px 2px 0;
   border-top: 1px dashed var(--line-strong);
 }
-.composer__rail-foot--center { text-align: center; }
 .composer__rail-foot code {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px;
@@ -820,35 +741,26 @@ select {
   color: var(--ink-2);
   white-space: nowrap;
 }
-.composer__keys {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 1px 6px;
-  border: 1px solid var(--line-strong);
-  border-radius: 5px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 10.5px;
-  color: var(--ink-2);
-  background: var(--card);
-  margin: 0 2px;
-}
 
 /* — Palette (typecase) ———————————————————————————————— */
+/* Horizontal strip across the top of the composer. Cards flow in a
+   row and wrap when the column is narrow (e.g. iPad portrait). */
 .palette {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
 }
+.palette > li { min-width: 0; display: flex; }
 .palette__item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 10px 10px 9px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 14px;
+  width: 100%;
   background: var(--card);
   border: 1px solid var(--line-strong);
   border-radius: 8px;
@@ -891,23 +803,18 @@ select {
   justify-content: center;
   width: 18px;
   height: 18px;
-  margin-left: 8px;
   color: var(--ink-2);
   flex-shrink: 0;
 }
 .palette__label {
-  margin-left: 8px;
   font-family: "Fraunces", serif;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--ink);
   letter-spacing: -0.005em;
 }
 .palette__hint {
-  margin-left: 8px;
-  font-size: 11px;
-  color: var(--ink-3);
-  line-height: 1.35;
+  display: none;
 }
 
 /* — Drop zone (composing stick) ——————————————————————— */
@@ -975,12 +882,14 @@ select {
 }
 
 /* — Composed block (single section in the drop zone) ——— */
+/* Two rows: handle + body (pill) on row 1, modifier dock on row 2. */
 .block {
   position: relative;
   display: grid;
-  grid-template-columns: 22px 1fr auto;
+  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-items: stretch;
-  gap: 8px;
+  gap: 6px 8px;
   padding: 8px 10px 8px 4px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--moss);
@@ -1044,33 +953,25 @@ select {
 .block__body::before { left: calc(33.333% - 0.5px); }
 .block__body::after  { left: calc(66.666% - 0.5px); }
 
+/* Pill aligned to the cell's track (left / center / right). */
 .block__cell {
   display: flex;
   align-items: center;
-  gap: 6px;
   min-width: 0;
 }
+/* Type icon lives inside the pill as a small inline glyph; colour is
+   inherited from the pill so it picks up logo/separator/etc. tint. */
 .block__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
-  color: var(--ink-3);
-  border-radius: 6px;
-  background: var(--paper-2);
-  border: 1px solid var(--line);
-  padding: 3px;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  color: currentColor;
 }
 .block__icon svg { width: 100%; height: 100%; display: block; }
-.block.is-double .block__icon { width: 28px; height: 28px; padding: 4px; }
-.block__icon--text      { color: var(--ink-2); }
-.block__icon--logo      { color: var(--moss); background: var(--moss-softer); border-color: var(--moss-soft); }
-.block__icon--separator { color: var(--rust); background: var(--rust-soft); border-color: var(--rust-soft); }
-.block__icon--tasks     { color: var(--sky);  background: var(--sky-soft);  border-color: var(--sky-soft); }
-.block__icon--blank     { color: var(--ink-4); background: var(--paper-3); border-style: dashed; }
+.block.is-double .block__icon { width: 16px; height: 16px; }
 
 .block__cell--left   { justify-content: flex-start; grid-column: 1; }
 .block__cell--center { justify-content: center;     grid-column: 2; }
@@ -1078,6 +979,8 @@ select {
 .block__cell--span   { grid-column: 1 / -1; }
 .block__cell--span.block__cell--center { justify-content: center; }
 .block__cell--span.block__cell--right  { justify-content: flex-end; }
+/* Text input pill needs to fill the row regardless of alignment. */
+.block__cell--span > .block__pill--input { flex: 1 1 auto; }
 
 .block__pill {
   display: inline-flex;
@@ -1107,24 +1010,28 @@ select {
   letter-spacing: -0.01em;
 }
 
+/* Text pill: the label itself is the rounded pill, the icon and input
+   sit inside it so the icon visibly lives inside the pill outline. */
 .block__pill--input {
-  padding: 0;
-  background: transparent;
-  border-color: transparent;
-  width: 100%;
-}
-.block__pill input {
-  width: 100%;
-  height: 30px;
-  padding: 0 10px;
-  font: inherit;
+  padding: 4px 12px;
   background: var(--paper-2);
-  color: var(--ink);
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  width: 100%;
+  color: var(--ink-2);
 }
-.block__pill input:focus {
+.block__pill--input input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 26px;
+  padding: 0;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
   outline: none;
+}
+.block__pill--input:focus-within {
   border-color: var(--moss);
   box-shadow: 0 0 0 3px var(--moss-soft);
 }
@@ -1170,24 +1077,15 @@ select {
   font-style: italic;
 }
 
-.block__rule-line {
-  display: inline-block;
-  height: 2px;
-  width: 60%;
-  background: var(--rust);
-  border-radius: 1px;
-  vertical-align: middle;
-  margin: 0 8px;
-  opacity: 0.7;
-}
-
-/* Modifier dock — small toggle row + remove button */
+/* Modifier dock — small toggle row + remove button. Sits on its
+   own row so it never crowds the pill, regardless of dock length. */
 .block__dock {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: center;
+  grid-column: 1 / -1;
 }
 .mod {
   display: inline-flex;
@@ -1247,7 +1145,7 @@ select {
 .composer__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 12px;
   padding-top: 8px;
@@ -1259,9 +1157,10 @@ select {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   letter-spacing: 0;
   margin: 0;
-  flex: 1;
-  min-width: 220px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
+.composer__status:empty { display: none; }
 .composer__status.is-error  { color: var(--rust); }
 .composer__status.is-ok     { color: var(--moss); }
 .composer__status.is-busy   { color: var(--sky); }
@@ -1277,14 +1176,8 @@ select {
 @media (max-width: 640px) {
   .shell { width: calc(100vw - 24px); padding: 22px 0 60px; gap: 22px; }
   .page-topbar { gap: 14px; padding-bottom: 18px; }
-  .page-topbar__leading { width: 48px; height: 48px; border-radius: 12px; }
-  .page-topbar__leading .logo { width: 28px; }
   .page-title { font-size: 1.55rem; }
   .panel { padding: 18px; }
   .form__row { grid-template-columns: 1fr 1fr; }
-  .stats { grid-template-columns: 1fr 1fr; }
-  .composer__grid { grid-template-columns: 1fr; }
   .palette { grid-template-columns: 1fr; }
-  .block { grid-template-columns: 22px 1fr; grid-template-rows: auto auto; }
-  .block__dock { grid-column: 1 / -1; padding-left: 22px; }
 }

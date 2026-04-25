@@ -1,5 +1,7 @@
 # Crewday Thermal Printer
 
+![Printer console UI](docs/assets/printer-console.png)
+
 Docker-hosted Python service for printing configured worker task lists from `../crewday` to a thermal receipt printer.
 
 The first slice is a containerized ESC/POS probe that can dry-run render a sample receipt or send it to a network printer.
