@@ -119,6 +119,8 @@ def test_font_test_renders_escpos_feature_commands() -> None:
     assert b"\x1dB\x01" in payload
     assert "été à l'hôtel".encode("cp858") in payload
     assert "12€".encode("cp858") in payload
+    assert b"Bitmap raster image" in payload
+    assert payload.count(b"\x1dv0") >= 2
     assert payload.endswith(b"\x1dVA\x03")
 
 

@@ -231,6 +231,17 @@ def render_font_test(printer: PrinterConfig) -> bytes:
         printer.code_page,
     )
     output += escpos.text("", printer.code_page)
+
+    output += escpos.command(escpos.ESC, b"a", b"\x01")
+    output += escpos.bold(True)
+    output += escpos.text("Bitmap raster image", printer.code_page)
+    output += escpos.bold(False)
+    output += _bitmap_test_bytes()
+    output += escpos.command(escpos.ESC, b"a", b"\x00")
+    output += escpos.text(
+        "Bitmap should show border, diagonals, and checker blocks.",
+        printer.code_page,
+    )
     output += escpos.text("", printer.code_page)
 
     output += escpos.select_font("a")
@@ -240,6 +251,30 @@ def render_font_test(printer: PrinterConfig) -> bytes:
     if printer.cut:
         output += escpos.cut()
     return bytes(output)
+
+
+def _bitmap_test_bytes() -> bytes:
+    image = Image.new("1", (256, 96), 255)
+    draw = ImageDraw.Draw(image)
+
+    draw.rectangle((0, 0, image.width - 1, image.height - 1), outline=0, width=2)
+    draw.line((8, 8, image.width - 9, image.height - 9), fill=0, width=2)
+    draw.line((image.width - 9, 8, 8, image.height - 9), fill=0, width=2)
+
+    for row in range(4):
+        for col in range(8):
+            if (row + col) % 2 == 0:
+                x0 = 16 + col * 14
+                y0 = 18 + row * 14
+                draw.rectangle((x0, y0, x0 + 11, y0 + 11), fill=0)
+
+    draw.rectangle((152, 20, 232, 38), fill=0)
+    draw.rectangle((152, 56, 232, 74), fill=0)
+    draw.rectangle((152, 20, 170, 74), fill=0)
+    draw.rectangle((214, 20, 232, 74), fill=0)
+    draw.rectangle((176, 42, 208, 52), fill=0)
+
+    return escpos.raster_image(image)
 
 
 def receipt_text_preview(batch: TaskBatch, now: datetime, columns: int) -> str:
