@@ -4,10 +4,11 @@ This repository builds a Docker-hosted service that prints worker task lists fro
 
 ## Hard Rules
 
-- Do not run project commands directly on the host.
-- Use Docker for all runtime, dependency, test, lint, and printer commands.
-- Calibration, printer tests, config generation, and UI/server commands must also run inside Docker.
-- Host-side activity is limited to editing files and invoking Docker.
+- Do not run project runtime or toolchain commands directly on the host.
+- Use Docker for anything that installs or runs project dependencies, including Python, uv/pip, CUPS, printer drivers, test runners, linters, app servers, schedulers, calibration commands, and printer commands.
+- Calibration, printer tests, config generation, and UI/server commands must run inside Docker.
+- Normal repository and shell operations may run on the host when they do not install or execute project dependencies. Examples: `find`, `rg`, `sed`, `git status`, `git diff`, `git commit`, and `git push`.
+- Host-side editing is allowed.
 - Target Python is Python 3.14.
 - Keep printer settings configurable. Do not hard-code a single printer model or address into application logic.
 - Treat real printer output as an integration side effect. Make dry-run rendering available for development.
