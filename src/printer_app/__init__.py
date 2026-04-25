@@ -1,0 +1,2 @@
+"""Crewday thermal printer application."""
+

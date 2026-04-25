@@ -1,0 +1,22 @@
+services:
+  printer:
+    build: .
+    working_dir: /app
+    volumes:
+      - ./src:/app/src
+      - ./config:/config:ro
+      - ../crewday:/crewday:ro
+    environment:
+      PYTHONPATH: /app/src
+
+  dev:
+    build: .
+    working_dir: /app
+    volumes:
+      - ./src:/app/src
+      - ./config:/config:ro
+      - ../crewday:/crewday:ro
+    environment:
+      PYTHONPATH: /app/src
+    command: ["watchfiles", "python -m printer_app print-test --dry-run --config /config/printer.yaml", "/app/src", "/config"]
+
