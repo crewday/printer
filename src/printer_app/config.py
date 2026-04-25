@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from printer_app import escpos
 from printer_app.models import (
     AppConfig,
     CrewdayConfig,
@@ -15,6 +16,7 @@ from printer_app.models import (
     UIConfig,
     WorkerConfig,
 )
+from printer_app.profiles import default_profile, get_profile, profile_ids
 
 DEFAULT_CONFIG_PATH = Path("/config/printer.yaml")
 
@@ -27,6 +29,7 @@ def default_config() -> dict[str, Any]:
     ui_username = os.environ.get("PRINTER_UI_USERNAME", "admin")
     printer_host = os.environ.get("PRINTER_HOST", "192.168.20.15")
     crewday_token = os.environ.get("CREWDAY_API_TOKEN")
+    profile = default_profile()
     return {
         "ui": {
             "username": ui_username,
@@ -40,14 +43,18 @@ def default_config() -> dict[str, Any]:
         },
         "printer": {
             "type": "network_escpos",
-            "profile": "epson_tm_t20ii",
+            "profile": profile.id,
             "host": printer_host,
             "port": 9100,
             "timeout_seconds": 5,
-            "paper_columns": 48,
-            "print_density": 8,
-            "print_speed": 6,
-            "cut": True,
+            "paper_columns": profile.paper_columns,
+            "code_page": profile.code_pages[0],
+            "image_logo": profile.image_logo,
+            "supports_print_density": profile.supports_print_density,
+            "supports_print_speed": profile.supports_print_speed,
+            "print_density": profile.print_density,
+            "print_speed": profile.print_speed,
+            "cut": profile.cut,
         },
         "workers": [
             {
@@ -101,16 +108,29 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         api_token=os.environ.get("CREWDAY_API_TOKEN") or crewday_raw.get("api_token"),
         workspace_id=crewday_raw.get("workspace_id"),
     )
+    profile_id = str(printer_raw.get("profile", default_profile().id))
+    profile = get_profile(profile_id) or default_profile()
     printer = PrinterConfig(
         type=str(printer_raw.get("type", "network_escpos")),
-        profile=str(printer_raw.get("profile", "generic_escpos")),
+        profile=profile_id,
         host=str(printer_raw.get("host", "192.168.20.15")),
         port=int(printer_raw.get("port", 9100)),
         timeout_seconds=float(printer_raw.get("timeout_seconds", 5)),
-        paper_columns=int(printer_raw.get("paper_columns", 48)),
-        print_density=int(printer_raw.get("print_density", 0)),
-        print_speed=int(printer_raw.get("print_speed", 0)),
-        cut=bool(printer_raw.get("cut", True)),
+        paper_columns=int(printer_raw.get("paper_columns", profile.paper_columns)),
+        code_page=str(printer_raw.get("code_page", profile.code_pages[0])),
+        image_logo=bool(printer_raw.get("image_logo", profile.image_logo)),
+        supports_print_density=bool(
+            printer_raw.get(
+                "supports_print_density",
+                profile.supports_print_density,
+            )
+        ),
+        supports_print_speed=bool(
+            printer_raw.get("supports_print_speed", profile.supports_print_speed)
+        ),
+        print_density=int(printer_raw.get("print_density", profile.print_density)),
+        print_speed=int(printer_raw.get("print_speed", profile.print_speed)),
+        cut=bool(printer_raw.get("cut", profile.cut)),
     )
     validate_printer_config(printer)
 
@@ -130,6 +150,10 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
 def validate_printer_config(printer: PrinterConfig) -> None:
     if printer.type != "network_escpos":
         raise ValueError(f"unsupported printer.type: {printer.type}")
+    if printer.profile not in profile_ids():
+        raise ValueError(f"unsupported printer.profile: {printer.profile}")
+    if printer.code_page not in escpos.CODE_PAGES:
+        raise ValueError(f"unsupported printer.code_page: {printer.code_page}")
     if not printer.host:
         raise ValueError("printer.host is required")
     if not 1 <= printer.port <= 65535:

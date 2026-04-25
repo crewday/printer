@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from printer_app.models import PrinterConfig, ReceiptTask, TaskBatch
-from printer_app.renderer import receipt_text_preview, render_receipt
+from printer_app.renderer import (
+    receipt_text_preview,
+    render_receipt,
+    render_receipt_preview,
+)
 
 
 def _printer() -> PrinterConfig:
@@ -15,6 +20,10 @@ def _printer() -> PrinterConfig:
         port=9100,
         timeout_seconds=5,
         paper_columns=48,
+        code_page="cp437",
+        image_logo=True,
+        supports_print_density=True,
+        supports_print_speed=True,
         print_density=8,
         print_speed=6,
         cut=True,
@@ -54,6 +63,44 @@ def test_receipt_renders_escpos_bytes_with_logo_and_cut() -> None:
     assert b"TASK LIST" in payload
     assert b"Prepare Villa Sud" in payload
     assert payload.endswith(b"\x1dVA\x03")
+
+
+def test_receipt_skips_disabled_profile_capability_commands() -> None:
+    now = datetime(2026, 4, 25, 8, 30, tzinfo=ZoneInfo("Asia/Dubai"))
+    batch = TaskBatch(
+        worker_name="Vincent",
+        source_label="Mock tasks",
+        generated_at=now,
+        tasks=(ReceiptTask(id="1", title="Prepare Villa Sud"),),
+    )
+    printer = replace(
+        _printer(),
+        image_logo=False,
+        supports_print_density=False,
+        supports_print_speed=False,
+    )
+
+    payload = render_receipt(batch, printer, now)
+
+    assert b"\x1d(K\x02\x001" not in payload
+    assert b"\x1d(K\x02\x002" not in payload
+    assert b"\x1dv0" in payload
+
+
+def test_receipt_preview_uses_configured_print_width() -> None:
+    now = datetime(2026, 4, 25, 8, 30, tzinfo=ZoneInfo("Asia/Dubai"))
+    batch = TaskBatch(
+        worker_name="Vincent",
+        source_label="Mock tasks",
+        generated_at=now,
+        tasks=(ReceiptTask(id="1", title="Prepare Villa Sud"),),
+    )
+
+    preview = render_receipt_preview(batch, _printer(), now)
+
+    assert preview.png.startswith(b"\x89PNG")
+    assert preview.width_dots == 48 * 12
+    assert preview.height_dots > 0
 
 
 def test_logo_raster_is_not_solid_black() -> None:

@@ -115,28 +115,73 @@
               <div class="form__row">
                 <label class="field">
                   <span class="field__label">Profile</span>
-                  <input class="input" name="profile" value="{{ config.printer.profile }}" required>
+                  <select class="input" id="profile" name="profile" required>
+                    {% for profile in profiles %}
+                      <option value="{{ profile.id }}" {% if profile.id == config.printer.profile %}selected{% endif %}>
+                        {{ profile.name }}
+                      </option>
+                    {% endfor %}
+                  </select>
                 </label>
                 <label class="field">
                   <span class="field__label">Columns</span>
-                  <input class="input" name="paper_columns" type="number" value="{{ config.printer.paper_columns }}" required>
+                  <input class="input" id="paper-columns" name="paper_columns" type="number" value="{{ config.printer.paper_columns }}" required>
+                  <span class="field__hint" id="paper-width">
+                    {% if selected_profile %}{{ selected_profile.paper_width }}{% else %}paper width{% endif %}
+                  </span>
+                </label>
+                <label class="field">
+                  <span class="field__label">Code page</span>
+                  <select class="input" id="code-page" name="code_page" required>
+                    {% for code_page in all_code_pages %}
+                      <option value="{{ code_page }}" {% if code_page == config.printer.code_page %}selected{% endif %}>{{ code_page }}</option>
+                    {% endfor %}
+                  </select>
                 </label>
                 <label class="field">
                   <span class="field__label">Density</span>
-                  <input class="input" name="print_density" type="number" min="0" max="255" value="{{ config.printer.print_density }}" required>
+                  <input class="input" id="print-density" name="print_density" type="number" min="0" max="255" value="{{ config.printer.print_density }}" required>
                   <span class="field__hint">0–255</span>
                 </label>
                 <label class="field">
                   <span class="field__label">Speed</span>
-                  <input class="input" name="print_speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}" required>
+                  <input class="input" id="print-speed" name="print_speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}" required>
                   <span class="field__hint">0–17</span>
                 </label>
               </div>
 
-              <label class="check">
-                <input name="cut" type="checkbox" {% if config.printer.cut %}checked{% endif %}>
-                <span>Cut paper after each receipt</span>
-              </label>
+              <div class="profile-card" aria-live="polite">
+                <span class="profile-card__title" id="profile-name">
+                  {% if selected_profile %}{{ selected_profile.name }}{% else %}Custom profile{% endif %}
+                </span>
+                <span class="profile-card__meta" id="cut-behavior">
+                  {% if selected_profile %}{{ selected_profile.cut_behavior }}{% endif %}
+                </span>
+                <div class="profile-card__flags">
+                  <span id="image-logo-flag">Image/logo {% if config.printer.image_logo %}supported{% else %}off{% endif %}</span>
+                  <span id="density-flag">Density {% if config.printer.supports_print_density %}supported{% else %}off{% endif %}</span>
+                  <span id="speed-flag">Speed {% if config.printer.supports_print_speed %}supported{% else %}off{% endif %}</span>
+                </div>
+              </div>
+
+              <div class="check-grid">
+                <label class="check">
+                  <input id="cut" name="cut" type="checkbox" {% if config.printer.cut %}checked{% endif %}>
+                  <span>Cut paper after each receipt</span>
+                </label>
+                <label class="check">
+                  <input id="image-logo" name="image_logo" type="checkbox" {% if config.printer.image_logo %}checked{% endif %}>
+                  <span>Print image/logo header</span>
+                </label>
+                <label class="check">
+                  <input id="supports-density" name="supports_print_density" type="checkbox" {% if config.printer.supports_print_density %}checked{% endif %}>
+                  <span>Send density command</span>
+                </label>
+                <label class="check">
+                  <input id="supports-speed" name="supports_print_speed" type="checkbox" {% if config.printer.supports_print_speed %}checked{% endif %}>
+                  <span>Send speed command</span>
+                </label>
+              </div>
             </div>
 
             <div class="btn-group btn-group--end">
@@ -196,13 +241,24 @@
               <div class="panel__head-stack">
                 <span class="panel__eyebrow">Preview</span>
                 <h2 class="panel__title">{{ config.workers[0].name }}'s receipt</h2>
-                <p class="panel__sub">Rendered offline at {{ config.printer.paper_columns }} columns. No paper consumed.</p>
+                <p class="panel__sub">Rendered from the dry-run ESC/POS bytes at {{ config.printer.paper_columns }} columns. No paper consumed.</p>
               </div>
               <span class="chip chip--sand"><span class="dot dot--sand"></span>dry run</span>
             </div>
 
-            <div class="receipt" role="img" aria-label="Receipt preview">
-              <pre class="receipt__paper">{{ preview }}</pre>
+            <div
+              class="receipt"
+              style="--receipt-width-dots: {{ preview.width_dots }}px;"
+              role="img"
+              aria-label="Receipt preview">
+              <div class="receipt__paper">
+                <img
+                  class="receipt__image"
+                  src="{{ preview.src }}"
+                  width="{{ preview.width_dots }}"
+                  height="{{ preview.height_dots }}"
+                  alt="{{ config.workers[0].name }} receipt preview">
+              </div>
             </div>
 
             <form method="post" action="/dry-run">
@@ -261,6 +317,54 @@
           document.documentElement.setAttribute("data-theme", next);
           try { localStorage.setItem("printer-theme", next); } catch (e) {}
         });
+      })();
+      (function () {
+        var profiles = {{ profile_data | tojson }};
+        var allCodePages = {{ all_code_pages | tojson }};
+        var select = document.getElementById("profile");
+        if (!select) return;
+
+        function setChecked(id, value) {
+          var el = document.getElementById(id);
+          if (el) el.checked = Boolean(value);
+        }
+
+        function setText(id, value) {
+          var el = document.getElementById(id);
+          if (el) el.textContent = value || "";
+        }
+
+        function applyProfile() {
+          var profile = profiles.find(function (item) { return item.id === select.value; });
+          var codePage = document.getElementById("code-page");
+          if (!profile || !codePage) return;
+
+          document.getElementById("paper-columns").value = profile.paper_columns;
+          document.getElementById("print-density").value = profile.print_density;
+          document.getElementById("print-speed").value = profile.print_speed;
+          setChecked("cut", profile.cut);
+          setChecked("image-logo", profile.image_logo);
+          setChecked("supports-density", profile.supports_print_density);
+          setChecked("supports-speed", profile.supports_print_speed);
+
+          codePage.replaceChildren();
+          allCodePages.forEach(function (value) {
+            var option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            option.selected = value === profile.code_pages[0];
+            codePage.appendChild(option);
+          });
+
+          setText("profile-name", profile.name);
+          setText("paper-width", profile.paper_width);
+          setText("cut-behavior", profile.cut_behavior);
+          setText("image-logo-flag", "Image/logo " + (profile.image_logo ? "supported" : "off"));
+          setText("density-flag", "Density " + (profile.supports_print_density ? "supported" : "off"));
+          setText("speed-flag", "Speed " + (profile.supports_print_speed ? "supported" : "off"));
+        }
+
+        select.addEventListener("change", applyProfile);
       })();
     </script>
   </body>

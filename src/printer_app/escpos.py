@@ -4,18 +4,29 @@ from PIL import Image
 
 ESC = b"\x1b"
 GS = b"\x1d"
+CODE_PAGES = {
+    "cp437": 0,
+    "cp850": 2,
+    "cp860": 3,
+    "cp863": 4,
+    "cp865": 5,
+    "cp866": 17,
+    "cp852": 18,
+    "cp858": 19,
+    "cp1252": 16,
+}
 
 
 def command(*parts: bytes) -> bytes:
     return b"".join(parts)
 
 
-def text(line: str = "") -> bytes:
-    return f"{line}\n".encode("cp437", errors="replace")
+def text(line: str = "", code_page: str = "cp437") -> bytes:
+    return f"{line}\n".encode(code_page, errors="replace")
 
 
-def centered(line: str, columns: int) -> bytes:
-    return text(line[:columns].center(columns))
+def centered(line: str, columns: int, code_page: str = "cp437") -> bytes:
+    return text(line[:columns].center(columns), code_page)
 
 
 def select_print_density(density: int) -> bytes:
@@ -26,13 +37,21 @@ def select_print_speed(speed: int) -> bytes:
     return command(GS, b"(K", b"\x02\x00", b"\x32", bytes([speed]))
 
 
+def select_code_page(code_page: str) -> bytes:
+    return command(ESC, b"t", bytes([CODE_PAGES[code_page]]))
+
+
 def cut() -> bytes:
     return command(GS, b"V", b"\x41", b"\x03")
 
 
-def reverse_bar(columns: int, label: str) -> bytes:
+def reverse_bar(columns: int, label: str, code_page: str = "cp437") -> bytes:
     padded = f" {label} "[:columns].center(columns)
-    return command(GS, b"B", b"\x01") + text(padded) + command(GS, b"B", b"\x00")
+    return (
+        command(GS, b"B", b"\x01")
+        + text(padded, code_page)
+        + command(GS, b"B", b"\x00")
+    )
 
 
 def filled_raster_block(width_bytes: int, height_dots: int) -> bytes:

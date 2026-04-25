@@ -1,0 +1,13 @@
+name: Epson TM-T20II
+description: Tested 80 mm network ESC/POS receipt printer.
+paper_width: 80 mm
+cut_behavior: Full or partial cut, controlled by the printer firmware.
+code_pages:
+  - cp437
+image_logo: true
+supports_print_density: true
+supports_print_speed: true
+paper_columns: 48
+print_density: 8
+print_speed: 6
+cut: true

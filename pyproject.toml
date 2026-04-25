@@ -29,7 +29,14 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-printer_app = ["assets/*.svg", "templates/*.html", "static/*.css", "static/*.svg"]
+printer_app = [
+  "assets/*.svg",
+  "profiles/*.yaml",
+  "templates/*.html",
+  "static/*.css",
+  "static/*.svg",
+]
+printer_app.profiles = ["*.yaml"]
 
 [tool.ruff]
 line-length = 88

@@ -83,7 +83,9 @@ workers:
 
 - The first backend is raw TCP ESC/POS over port `9100`.
 - The backend must be configurable by host, port, timeout, paper width, and profile.
-- ESC/POS profiles may also configure print density and print speed where supported.
+- ESC/POS profiles are YAML preset files under `src/printer_app/profiles/`.
+- Profiles configure default paper columns, cut behavior, code pages, image/logo support, and print density/speed support.
+- The active config may override profile defaults after selection.
 - The app should fail clearly when the printer is unreachable.
 - Real printing requires an explicit command such as `print-test`.
 

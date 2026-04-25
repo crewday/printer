@@ -4,6 +4,8 @@ Docker-hosted Python service for printing configured worker task lists from `../
 
 The first slice is a containerized ESC/POS probe that can dry-run render a sample receipt or send it to a network printer.
 
+Printer profiles live in `src/printer_app/profiles/*.yaml`. A profile declares preset columns, cut behavior, supported code pages, image/logo support, and whether density/speed ESC/POS commands should be sent. Add a printer preset by dropping another YAML file in that folder.
+
 ## Commands
 
 Build the image:

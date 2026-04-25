@@ -13,6 +13,10 @@ printer:
   port: 9100
   timeout_seconds: 5.0
   paper_columns: 48
+  code_page: cp437
+  image_logo: true
+  supports_print_density: true
+  supports_print_speed: true
   print_density: 8
   print_speed: 6
   cut: true

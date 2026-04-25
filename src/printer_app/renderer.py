@@ -8,7 +8,7 @@ from io import BytesIO
 from textwrap import wrap
 
 import cairosvg
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from printer_app import escpos
 from printer_app.models import PrinterConfig, ReceiptTask, TaskBatch
@@ -22,6 +22,8 @@ CHECKBOX_CONTINUATION = "    "
 LOGO_MAX_WIDTH_DOTS = 384
 LOGO_DOTS_PER_COLUMN = 8
 RULE_DOTS_PER_COLUMN = 12
+TEXT_CELL_WIDTH_DOTS = RULE_DOTS_PER_COLUMN
+TEXT_CELL_HEIGHT_DOTS = 24
 
 
 @dataclass(frozen=True)
@@ -31,41 +33,72 @@ class TaskTextBlock:
     checklist_lines: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ReceiptPreview:
+    png: bytes
+    width_dots: int
+    height_dots: int
+
+
 def render_receipt(batch: TaskBatch, printer: PrinterConfig, now: datetime) -> bytes:
     columns = printer.paper_columns
     output = bytearray()
 
     output += escpos.command(escpos.ESC, b"@")
-    output += escpos.select_print_density(printer.print_density)
-    output += escpos.select_print_speed(printer.print_speed)
+    output += escpos.select_code_page(printer.code_page)
+    if printer.supports_print_density:
+        output += escpos.select_print_density(printer.print_density)
+    if printer.supports_print_speed:
+        output += escpos.select_print_speed(printer.print_speed)
     output += escpos.command(escpos.ESC, b"a", b"\x01")
-    output += _logo_bytes(columns)
-    output += escpos.text()
+    if printer.image_logo:
+        output += _logo_bytes(columns)
+    output += escpos.text("", printer.code_page)
     output += escpos.command(escpos.ESC, b"E", b"\x01")
-    output += escpos.centered(RECEIPT_TITLE, columns)
+    output += escpos.centered(RECEIPT_TITLE, columns, printer.code_page)
     output += escpos.command(escpos.ESC, b"E", b"\x00")
-    output += _rule(columns)
+    output += _rule(columns, printer.code_page)
 
     output += escpos.command(escpos.ESC, b"a", b"\x00")
-    output += _render_lines(_metadata_lines(batch, now, columns))
-    output += _rule(columns)
+    output += _render_lines(_metadata_lines(batch, now, columns), printer.code_page)
+    output += _rule(columns, printer.code_page)
 
     if batch.tasks:
         for index, task in enumerate(batch.tasks, start=1):
-            output += _render_task(index, task, columns)
+            output += _render_task(index, task, columns, printer.code_page)
     else:
-        output += escpos.text("No tasks for this print window.")
-        output += escpos.text()
+        output += escpos.text("No tasks for this print window.", printer.code_page)
+        output += escpos.text("", printer.code_page)
 
-    output += _rule(columns)
+    output += _rule(columns, printer.code_page)
     output += escpos.command(escpos.ESC, b"a", b"\x01")
-    output += escpos.text(BRAND)
-    output += escpos.text()
-    output += escpos.text()
+    output += escpos.text(BRAND, printer.code_page)
+    output += escpos.text("", printer.code_page)
+    output += escpos.text("", printer.code_page)
 
     if printer.cut:
         output += escpos.cut()
     return bytes(output)
+
+
+def render_receipt_preview(
+    batch: TaskBatch, printer: PrinterConfig, now: datetime
+) -> ReceiptPreview:
+    payload = render_receipt(batch, printer, now)
+    width_dots = printer.paper_columns * RULE_DOTS_PER_COLUMN
+    image = _escpos_payload_to_image(
+        payload,
+        width_dots,
+        printer.paper_columns,
+        printer.code_page,
+    )
+    buffer = BytesIO()
+    image.save(buffer, format="PNG", optimize=True)
+    return ReceiptPreview(
+        png=buffer.getvalue(),
+        width_dots=image.width,
+        height_dots=image.height,
+    )
 
 
 def render_black_test(printer: PrinterConfig) -> bytes:
@@ -73,37 +106,47 @@ def render_black_test(printer: PrinterConfig) -> bytes:
     output = bytearray()
 
     output += escpos.command(escpos.ESC, b"@")
-    output += escpos.select_print_density(printer.print_density)
-    output += escpos.select_print_speed(printer.print_speed)
+    output += escpos.select_code_page(printer.code_page)
+    if printer.supports_print_density:
+        output += escpos.select_print_density(printer.print_density)
+    if printer.supports_print_speed:
+        output += escpos.select_print_speed(printer.print_speed)
     output += escpos.command(escpos.ESC, b"a", b"\x01")
     output += escpos.command(escpos.ESC, b"E", b"\x01")
-    output += escpos.text("BLACK TEST")
+    output += escpos.text("BLACK TEST", printer.code_page)
     output += escpos.command(escpos.ESC, b"E", b"\x00")
-    output += escpos.text()
+    output += escpos.text("", printer.code_page)
 
     output += escpos.command(escpos.ESC, b"a", b"\x00")
     output += escpos.text(
-        f"Density: {printer.print_density}  Speed: {printer.print_speed}"
+        f"Density: {printer.print_density}  Speed: {printer.print_speed}",
+        printer.code_page,
     )
-    output += escpos.text("Reverse text bars:")
-    output += escpos.reverse_bar(columns, "DENSITY CONFIGURED")
-    output += escpos.reverse_bar(columns, "SPEED CHECK")
-    output += escpos.text()
+    output += escpos.text("Reverse text bars:", printer.code_page)
+    output += escpos.reverse_bar(columns, "DENSITY CONFIGURED", printer.code_page)
+    output += escpos.reverse_bar(columns, "SPEED CHECK", printer.code_page)
+    output += escpos.text("", printer.code_page)
 
-    output += escpos.text("Filled raster blocks:")
-    output += escpos.text("Narrow:")
+    output += escpos.text("Filled raster blocks:", printer.code_page)
+    output += escpos.text("Narrow:", printer.code_page)
     output += escpos.filled_raster_block(width_bytes=12, height_dots=48)
-    output += escpos.text()
-    output += escpos.text("Medium:")
+    output += escpos.text("", printer.code_page)
+    output += escpos.text("Medium:", printer.code_page)
     output += escpos.filled_raster_block(width_bytes=24, height_dots=48)
-    output += escpos.text()
-    output += escpos.text("Full width:")
+    output += escpos.text("", printer.code_page)
+    output += escpos.text("Full width:", printer.code_page)
     output += escpos.filled_raster_block(width_bytes=48, height_dots=96)
-    output += escpos.text()
-    output += escpos.text("Solid blocks are worst-case thermal load.")
-    output += escpos.text("Judge final settings on normal receipts too.")
-    output += escpos.text()
-    output += escpos.text()
+    output += escpos.text("", printer.code_page)
+    output += escpos.text(
+        "Solid blocks are worst-case thermal load.",
+        printer.code_page,
+    )
+    output += escpos.text(
+        "Judge final settings on normal receipts too.",
+        printer.code_page,
+    )
+    output += escpos.text("", printer.code_page)
+    output += escpos.text("", printer.code_page)
 
     if printer.cut:
         output += escpos.cut()
@@ -126,20 +169,20 @@ def receipt_text_preview(batch: TaskBatch, now: datetime, columns: int) -> str:
     return "\n".join(lines)
 
 
-def _render_task(index: int, task: ReceiptTask, columns: int) -> bytes:
+def _render_task(index: int, task: ReceiptTask, columns: int, code_page: str) -> bytes:
     block = _task_text_block(index, task, columns)
     output = bytearray()
     output += escpos.command(escpos.ESC, b"E", b"\x01")
     for line in block.title_lines:
-        output += escpos.text(line)
+        output += escpos.text(line, code_page)
     output += escpos.command(escpos.ESC, b"E", b"\x00")
-    output += _render_lines(block.meta_lines)
-    output += _render_lines(block.checklist_lines)
-    output += escpos.text()
+    output += _render_lines(block.meta_lines, code_page)
+    output += _render_lines(block.checklist_lines, code_page)
+    output += escpos.text("", code_page)
     return bytes(output)
 
 
-def _rule(columns: int) -> bytes:
+def _rule(columns: int, code_page: str) -> bytes:
     return (
         escpos.command(escpos.ESC, b"a", b"\x00")
         + escpos.horizontal_rule(
@@ -147,7 +190,7 @@ def _rule(columns: int) -> bytes:
             dots_per_column=RULE_DOTS_PER_COLUMN,
             thickness_dots=RULE_THICKNESS_DOTS,
         )
-        + escpos.text()
+        + escpos.text("", code_page)
     )
 
 
@@ -222,8 +265,8 @@ def _checklist_item_lines(value: str, columns: int) -> tuple[str, ...]:
     )
 
 
-def _render_lines(lines: tuple[str, ...]) -> bytes:
-    return b"".join(escpos.text(line) for line in lines)
+def _render_lines(lines: tuple[str, ...], code_page: str) -> bytes:
+    return b"".join(escpos.text(line, code_page) for line in lines)
 
 
 def _wrapped(value: str, columns: int) -> list[str]:
@@ -232,6 +275,160 @@ def _wrapped(value: str, columns: int) -> list[str]:
 
 def _preview_rule(columns: int) -> str:
     return "=" * columns
+
+
+def _escpos_payload_to_image(
+    payload: bytes,
+    width_dots: int,
+    columns: int,
+    code_page: str,
+) -> Image.Image:
+    font, bold_font, text_height = _preview_fonts()
+    alignment = 0
+    bold = False
+    y = 0
+    strips: list[tuple[int, Image.Image]] = []
+    text_buffer = bytearray()
+
+    def flush_text(*, force_line_feed: bool = False) -> None:
+        nonlocal y, text_buffer
+        if not text_buffer and not force_line_feed:
+            return
+        line = bytes(text_buffer).decode(code_page, errors="replace")
+        text_buffer.clear()
+        strip = _text_line_to_image(
+            line,
+            bold_font if bold else font,
+            columns,
+            text_height,
+        )
+        x = _aligned_x(width_dots, _text_content_width(line, columns), alignment)
+        strips.append((x, strip))
+        y += strip.height
+
+    i = 0
+    while i < len(payload):
+        byte = payload[i]
+        if byte == 0x0A:
+            flush_text(force_line_feed=True)
+            i += 1
+            continue
+
+        if byte == 0x1B and i + 1 < len(payload):
+            command = payload[i + 1]
+            if command == 0x40:
+                alignment = 0
+                bold = False
+                i += 2
+                continue
+            if command == 0x61 and i + 2 < len(payload):
+                alignment = payload[i + 2]
+                i += 3
+                continue
+            if command == 0x45 and i + 2 < len(payload):
+                bold = payload[i + 2] != 0
+                i += 3
+                continue
+            if command == 0x74 and i + 2 < len(payload):
+                i += 3
+                continue
+
+        if byte == 0x1D and i + 1 < len(payload):
+            command = payload[i + 1]
+            if command == 0x28:
+                if i + 5 < len(payload) and payload[i + 2] == 0x4B:
+                    data_length = payload[i + 3] + (payload[i + 4] << 8)
+                    i += 5 + data_length
+                    continue
+                if i + 4 < len(payload):
+                    data_length = payload[i + 2] + (payload[i + 3] << 8)
+                    i += 4 + data_length
+                    continue
+            if command == 0x76 and i + 7 < len(payload) and payload[i + 2] == ord("0"):
+                flush_text()
+                width_bytes = payload[i + 4] + (payload[i + 5] << 8)
+                height = payload[i + 6] + (payload[i + 7] << 8)
+                data_start = i + 8
+                data_end = data_start + width_bytes * height
+                raster = _raster_bytes_to_image(
+                    payload[data_start:data_end], width_bytes, height
+                )
+                x = _aligned_x(width_dots, raster.width, alignment)
+                strips.append((x, raster))
+                y += raster.height
+                i = data_end
+                continue
+            if command == 0x42 and i + 2 < len(payload):
+                i += 3
+                continue
+            if command == 0x56:
+                i += 4 if i + 3 < len(payload) else 2
+                continue
+
+        text_buffer.append(byte)
+        i += 1
+
+    flush_text()
+    height = max(y, 1)
+    preview = Image.new("L", (width_dots, height), 255)
+    cursor_y = 0
+    for x, strip in strips:
+        preview.paste(strip, (x, cursor_y))
+        cursor_y += strip.height
+    return preview
+
+
+def _preview_fonts() -> tuple[ImageFont.FreeTypeFont, ImageFont.FreeTypeFont, int]:
+    try:
+        return (
+            ImageFont.truetype("DejaVuSansMono.ttf", 18),
+            ImageFont.truetype("DejaVuSansMono-Bold.ttf", 18),
+            TEXT_CELL_HEIGHT_DOTS,
+        )
+    except OSError:
+        font = ImageFont.load_default(size=18)
+        return font, font, TEXT_CELL_HEIGHT_DOTS
+
+
+def _text_line_to_image(
+    line: str,
+    font: ImageFont.ImageFont,
+    columns: int,
+    text_height: int,
+) -> Image.Image:
+    strip = Image.new("L", (columns * TEXT_CELL_WIDTH_DOTS, text_height), 255)
+    draw = ImageDraw.Draw(strip)
+    for col, char in enumerate(line[:columns]):
+        x = col * TEXT_CELL_WIDTH_DOTS
+        draw.text((x, 1), char, font=font, fill=0)
+    return strip
+
+
+def _text_content_width(line: str, columns: int) -> int:
+    if not line:
+        return 0
+    return min(len(line), columns) * TEXT_CELL_WIDTH_DOTS
+
+
+def _raster_bytes_to_image(data: bytes, width_bytes: int, height: int) -> Image.Image:
+    image = Image.new("1", (width_bytes * 8, height), 255)
+    pixels = image.load()
+    for y in range(height):
+        row = y * width_bytes
+        for x_byte in range(width_bytes):
+            value = data[row + x_byte] if row + x_byte < len(data) else 0
+            for bit in range(8):
+                if value & (0x80 >> bit):
+                    pixels[x_byte * 8 + bit, y] = 0
+    return image
+
+
+def _aligned_x(width_dots: int, content_width: int, alignment: int) -> int:
+    if alignment == 1:
+        return max((width_dots - content_width) // 2, 0)
+    if alignment == 2:
+        return max(width_dots - content_width, 0)
+    return 0
 
 
 @lru_cache(maxsize=8)

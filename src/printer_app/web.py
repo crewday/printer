@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from base64 import b64encode
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from printer_app import escpos
 from printer_app.auth import configured_password_hash, verify_password
 from printer_app.config import (
     config_path_from_env,
@@ -19,8 +21,13 @@ from printer_app.config import (
     load_config,
     write_raw_config,
 )
-from printer_app.models import AppConfig
-from printer_app.renderer import receipt_text_preview, render_black_test, render_receipt
+from printer_app.models import AppConfig, PrinterProfile
+from printer_app.profiles import get_profile, load_profiles
+from printer_app.renderer import (
+    render_black_test,
+    render_receipt,
+    render_receipt_preview,
+)
 from printer_app.task_source import build_task_source
 from printer_app.transport import send_to_network_printer
 
@@ -64,6 +71,10 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
         "index.html",
         {
             "config": config,
+            "profiles": load_profiles(),
+            "selected_profile": get_profile(config.printer.profile),
+            "profile_data": [_profile_data(profile) for profile in load_profiles()],
+            "all_code_pages": sorted(escpos.CODE_PAGES),
             "preview": preview,
             "results": list(reversed(RECENT_RESULTS[-8:])),
         },
@@ -78,8 +89,12 @@ def save_settings(
     timeout_seconds: Annotated[float, Form()],
     paper_columns: Annotated[int, Form()],
     profile: Annotated[str, Form()],
+    code_page: Annotated[str, Form()],
     print_density: Annotated[int, Form()],
     print_speed: Annotated[int, Form()],
+    image_logo: Annotated[str | None, Form()] = None,
+    supports_print_density: Annotated[str | None, Form()] = None,
+    supports_print_speed: Annotated[str | None, Form()] = None,
     cut: Annotated[str | None, Form()] = None,
 ) -> RedirectResponse:
     config = load_config(config_path_from_env())
@@ -91,6 +106,10 @@ def save_settings(
             "timeout_seconds": timeout_seconds,
             "paper_columns": paper_columns,
             "profile": profile,
+            "code_page": code_page,
+            "image_logo": image_logo == "on",
+            "supports_print_density": supports_print_density == "on",
+            "supports_print_speed": supports_print_speed == "on",
             "print_density": print_density,
             "print_speed": print_speed,
             "cut": cut == "on",
@@ -149,14 +168,37 @@ def black_test(
     return RedirectResponse("/", status_code=303)
 
 
-def _preview_for_first_worker(config: AppConfig) -> str:
+def _preview_for_first_worker(config: AppConfig) -> dict[str, str | int]:
     worker = config.workers[0]
     now = datetime.now(ZoneInfo(worker.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
-    return receipt_text_preview(batch, now, config.printer.paper_columns)
+    preview = render_receipt_preview(batch, config.printer, now)
+    encoded = b64encode(preview.png).decode("ascii")
+    return {
+        "src": f"data:image/png;base64,{encoded}",
+        "width_dots": preview.width_dots,
+        "height_dots": preview.height_dots,
+    }
 
 
 def _record(message: str) -> None:
     stamp = datetime.now().strftime("%H:%M:%S")
     RECENT_RESULTS.append(f"{stamp} {message}")
     del RECENT_RESULTS[:-20]
+
+
+def _profile_data(profile: PrinterProfile) -> dict[str, object]:
+    return {
+        "id": profile.id,
+        "name": profile.name,
+        "paper_width": profile.paper_width,
+        "cut_behavior": profile.cut_behavior,
+        "code_pages": profile.code_pages,
+        "image_logo": profile.image_logo,
+        "supports_print_density": profile.supports_print_density,
+        "supports_print_speed": profile.supports_print_speed,
+        "paper_columns": profile.paper_columns,
+        "print_density": profile.print_density,
+        "print_speed": profile.print_speed,
+        "cut": profile.cut,
+    }

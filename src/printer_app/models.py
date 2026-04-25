@@ -18,6 +18,27 @@ class PrinterConfig:
     port: int
     timeout_seconds: float
     paper_columns: int
+    code_page: str
+    image_logo: bool
+    supports_print_density: bool
+    supports_print_speed: bool
+    print_density: int
+    print_speed: int
+    cut: bool
+
+
+@dataclass(frozen=True)
+class PrinterProfile:
+    id: str
+    name: str
+    description: str
+    paper_width: str
+    cut_behavior: str
+    code_pages: tuple[str, ...]
+    image_logo: bool
+    supports_print_density: bool
+    supports_print_speed: bool
+    paper_columns: int
     print_density: int
     print_speed: int
     cut: bool
