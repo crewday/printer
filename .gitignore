@@ -216,3 +216,24 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Crewday printer local runtime data
+.docker/
+data/
+runtime/
+tmp/
+*.escpos
+*.receipt
+*.print.bin
+
+# Local config and secrets
+.env.*
+!.env.example
+config/*.local.yaml
+config/*.secret.yaml
+config/generated*.yaml
+!config/printer.yaml
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
