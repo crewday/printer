@@ -15,27 +15,43 @@ docker compose build
 Render without printing:
 
 ```sh
-docker compose run --rm printer python -m printer_app print-test --dry-run --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app print-test --dry-run --config /config/printer.yaml
+```
+
+Render a text preview:
+
+```sh
+docker compose run --rm printer uv run python -m printer_app preview --config /config/printer.yaml
 ```
 
 Print to the configured printer:
 
 ```sh
-docker compose run --rm printer python -m printer_app print-test --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app print-test --config /config/printer.yaml
 ```
 
 Calibrate printer darkness and speed:
 
 ```sh
-docker compose run --rm printer python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
 ```
 
 See [docs/PRINTER_CALIBRATION.md](docs/PRINTER_CALIBRATION.md) for the full procedure.
 
-All runtime, test, calibration, and printer commands are intended to run inside Docker. Do not run the Python application directly on the host.
+All runtime, uv, test, calibration, and printer commands are intended to run inside Docker. Do not run the Python application or project toolchain directly on the host.
 
-Development watch mode placeholder:
+Run the authenticated setup UI:
 
 ```sh
-docker compose up dev
+PRINTER_UI_PASSWORD=change-me docker compose up dev
+```
+
+Then open <http://127.0.0.1:8087>.
+
+Run tests, linting, and formatting through uv inside Docker:
+
+```sh
+docker compose run --rm printer uv run --group dev pytest
+docker compose run --rm printer uv run --group dev ruff check .
+docker compose run --rm printer uv run --group dev ruff format .
 ```

@@ -25,10 +25,10 @@ Speed values are model-dependent. For the tested Epson TM-T20II, `1` is slowest 
 Start with a few broad combinations. Print the black test for each one and write the density/speed on the paper if needed.
 
 ```sh
-docker compose run --rm printer python -m printer_app black-test --density 4 --speed 12 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 6 --speed 9 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 10 --speed 4 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 4 --speed 12 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 6 --speed 9 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 10 --speed 4 --config /config/printer.yaml
 ```
 
 Pick the first setting that looks clearly dark enough. Prefer the faster setting when two settings look similar.
@@ -40,10 +40,10 @@ Keep the chosen speed fixed and test density around the best quick-sweep result.
 Example, if speed `6` looked best:
 
 ```sh
-docker compose run --rm printer python -m printer_app black-test --density 6 --speed 6 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 10 --speed 6 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 12 --speed 6 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 6 --speed 6 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 10 --speed 6 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 12 --speed 6 --config /config/printer.yaml
 ```
 
 Stop increasing density when the output no longer gets meaningfully darker.
@@ -55,10 +55,10 @@ Keep the chosen density fixed and test speed around the best quick-sweep result.
 Example, if density `8` looked best:
 
 ```sh
-docker compose run --rm printer python -m printer_app black-test --density 8 --speed 4 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 8 --speed 8 --config /config/printer.yaml
-docker compose run --rm printer python -m printer_app black-test --density 8 --speed 10 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 8 --speed 4 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 8 --speed 6 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 8 --speed 8 --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app black-test --density 8 --speed 10 --config /config/printer.yaml
 ```
 
 Choose the fastest speed that remains readable and dark enough.
@@ -68,7 +68,7 @@ Choose the fastest speed that remains readable and dark enough.
 After choosing settings, update `config/printer.yaml`, then print a normal task receipt:
 
 ```sh
-docker compose run --rm printer python -m printer_app print-test --config /config/printer.yaml
+docker compose run --rm printer uv run python -m printer_app print-test --config /config/printer.yaml
 ```
 
 Judge the final receipt by worker name readability, task readability, and whether separators/logos distract from the task list.

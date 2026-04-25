@@ -1,18 +1,27 @@
+ui:
+  username: admin
+  password_hash: null
+crewday:
+  source: mock
+  base_url: http://crewday:8000
+  api_token: null
+  workspace_id: null
 printer:
   type: network_escpos
   profile: epson_tm_t20ii
   host: 192.168.20.15
   port: 9100
-  timeout_seconds: 5
-  paper_columns: 42
+  timeout_seconds: 5.0
+  paper_columns: 48
   print_density: 8
   print_speed: 6
   cut: true
-
 workers:
-  - name: Vincent
-    schedule: "0 8 * * *"
-    tasks:
-      - "Review overnight crewday updates"
-      - "Print the next task batch"
-      - "Confirm thermal printer output is readable"
+- name: Vincent
+  schedule: 0 8 * * *
+  crewday_user_id: null
+  timezone: Asia/Dubai
+  tasks:
+  - Review overnight crewday updates
+  - Print the next task batch
+  - Confirm thermal printer output is readable

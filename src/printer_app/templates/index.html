@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Crewday Printer</title>
+    <link rel="stylesheet" href="/static/ui.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <img src="/static/crewday-logo.svg" alt="crew.day" class="logo">
+        <div>
+          <h1>Printer Setup</h1>
+          <p>{{ config.printer.profile }} at {{ config.printer.host }}:{{ config.printer.port }}</p>
+        </div>
+      </header>
+
+      <section class="grid">
+        <form class="panel" method="post" action="/settings">
+          <h2>Printer</h2>
+          <label>Host <input name="host" value="{{ config.printer.host }}" required></label>
+          <label>Port <input name="port" type="number" value="{{ config.printer.port }}" required></label>
+          <label>Timeout <input name="timeout_seconds" type="number" step="0.1" value="{{ config.printer.timeout_seconds }}" required></label>
+          <label>Columns <input name="paper_columns" type="number" value="{{ config.printer.paper_columns }}" required></label>
+          <label>Profile <input name="profile" value="{{ config.printer.profile }}" required></label>
+          <label>Density <input name="print_density" type="number" min="0" max="255" value="{{ config.printer.print_density }}" required></label>
+          <label>Speed <input name="print_speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}" required></label>
+          <label class="check"><input name="cut" type="checkbox" {% if config.printer.cut %}checked{% endif %}> Cut paper</label>
+          <button type="submit">Save settings</button>
+        </form>
+
+        <section class="panel">
+          <h2>Receipt Preview</h2>
+          <pre>{{ preview }}</pre>
+          <form method="post" action="/dry-run">
+            <button type="submit">Download dry run bytes</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <h2>Calibration</h2>
+          <form method="post" action="/black-test" class="inline">
+            <label>Density <input name="density" type="number" min="0" max="255" value="{{ config.printer.print_density }}"></label>
+            <label>Speed <input name="speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}"></label>
+            <button type="submit">Print black test</button>
+          </form>
+          <form method="post" action="/print-test">
+            <button class="secondary" type="submit">Print task receipt</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <h2>Recent Results</h2>
+          {% if results %}
+            <ul class="results">
+              {% for result in results %}
+                <li>{{ result }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p>No commands yet.</p>
+          {% endif %}
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

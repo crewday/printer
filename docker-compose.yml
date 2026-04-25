@@ -4,19 +4,34 @@ services:
     working_dir: /app
     volumes:
       - ./src:/app/src
-      - ./config:/config:ro
+      - ./tests:/app/tests
+      - ./config:/config
       - ../crewday:/crewday:ro
     environment:
       PYTHONPATH: /app/src
+      PRINTER_CONFIG: /config/printer.yaml
+      PRINTER_UI_USERNAME: ${PRINTER_UI_USERNAME:-admin}
+      PRINTER_UI_PASSWORD: ${PRINTER_UI_PASSWORD:-}
+      PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
+      CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
+    ports:
+      - "8087:8080"
 
   dev:
     build: .
     working_dir: /app
     volumes:
       - ./src:/app/src
-      - ./config:/config:ro
+      - ./tests:/app/tests
+      - ./config:/config
       - ../crewday:/crewday:ro
     environment:
       PYTHONPATH: /app/src
-    command: ["watchfiles", "python -m printer_app print-test --dry-run --config /config/printer.yaml", "/app/src", "/config"]
-
+      PRINTER_CONFIG: /config/printer.yaml
+      PRINTER_UI_USERNAME: ${PRINTER_UI_USERNAME:-admin}
+      PRINTER_UI_PASSWORD: ${PRINTER_UI_PASSWORD:-}
+      PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
+      CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
+    ports:
+      - "8087:8080"
+    command: ["uv", "run", "--group", "dev", "watchfiles", "uv run python -m printer_app serve --host 0.0.0.0 --port 8080", "/app/src", "/config"]

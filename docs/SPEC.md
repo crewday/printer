@@ -43,7 +43,7 @@ printer:
   host: 192.168.20.15
   port: 9100
   timeout_seconds: 5
-  paper_columns: 42
+  paper_columns: 48
   print_density: 8
   print_speed: 6
   cut: true

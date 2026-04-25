@@ -1,0 +1,161 @@
+:root {
+  color-scheme: light;
+  --paper: #FAF7F2;
+  --paper-2: #F3ECE0;
+  --card: #FFFDF9;
+  --ink: #1F1A14;
+  --ink-2: #524A3E;
+  --line: #E7E0D1;
+  --moss: #3F6E3B;
+  --rust: #B04A27;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+}
+
+.shell {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.logo {
+  width: 138px;
+  height: auto;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+h1 {
+  font-size: 1.85rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+  margin-bottom: 14px;
+}
+
+p {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.15fr);
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check input {
+  width: 20px;
+  min-height: 20px;
+}
+
+button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--moss);
+  color: #fff;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: var(--rust);
+  margin-top: 12px;
+}
+
+.inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.inline button {
+  grid-column: 1 / -1;
+}
+
+pre {
+  overflow: auto;
+  margin: 0 0 14px;
+  padding: 12px;
+  background: var(--paper-2);
+  border-radius: 6px;
+  font: 12px/1.4 "JetBrains Mono", ui-monospace, monospace;
+}
+
+.results {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+}
+
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
