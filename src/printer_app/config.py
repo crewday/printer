@@ -15,12 +15,39 @@ from printer_app.models import (
     CrewdayConfig,
     PrinterConfig,
     PrintScheduleConfig,
+    ReceiptTemplateConfig,
+    ReceiptTemplateSection,
     UIConfig,
     WorkerConfig,
 )
 from printer_app.profiles import default_profile, get_profile, profile_ids
 
 DEFAULT_CONFIG_PATH = Path("/config/printer.yaml")
+
+DEFAULT_RECEIPT_TEMPLATE = {
+    "sections": [
+        {"type": "logo", "align": "center"},
+        {
+            "type": "text",
+            "value": "{{ worker_name }}, {{ display_date }}",
+            "align": "center",
+            "font": "b",
+            "width": 2,
+            "height": 2,
+            "bold": True,
+        },
+        {
+            "type": "text",
+            "value": "Printed on {{ display_datetime }}",
+            "align": "center",
+            "font": "b",
+        },
+        {"type": "separator", "align": "center"},
+        {"type": "tasks"},
+        {"type": "separator", "align": "center", "trailing_blank": False},
+        {"type": "logo", "align": "center", "scale": 0.5},
+    ],
+}
 
 
 def config_path_from_env() -> Path:
@@ -46,6 +73,7 @@ def default_config() -> dict[str, Any]:
         "print_schedule": {
             "cron": "",
         },
+        "receipt_template": DEFAULT_RECEIPT_TEMPLATE,
         "printer": {
             "type": "network_escpos",
             "profile": profile.id,
@@ -96,6 +124,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     ui_raw = raw.get("ui") or {}
     crewday_raw = raw.get("crewday") or {}
     print_schedule_raw = raw.get("print_schedule") or {}
+    receipt_template_raw = raw.get("receipt_template") or DEFAULT_RECEIPT_TEMPLATE
     printer_raw = raw.get("printer") or {}
     workers_raw = raw.get("workers") or []
 
@@ -143,6 +172,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         cut=bool(printer_raw.get("cut", profile.cut)),
     )
     validate_printer_config(printer)
+    receipt_template = parse_receipt_template(receipt_template_raw)
 
     workers = tuple(
         WorkerConfig(
@@ -158,9 +188,70 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         ui=ui,
         crewday=crewday,
         print_schedule=print_schedule,
+        receipt_template=receipt_template,
         printer=printer,
         workers=workers,
     )
+
+
+def default_receipt_template() -> ReceiptTemplateConfig:
+    return parse_receipt_template(DEFAULT_RECEIPT_TEMPLATE)
+
+
+def parse_receipt_template(raw: dict[str, Any]) -> ReceiptTemplateConfig:
+    sections_raw = raw.get("sections") or []
+    if not isinstance(sections_raw, list) or not sections_raw:
+        raise ValueError("receipt_template.sections must include at least one section")
+    if not all(isinstance(section, dict) for section in sections_raw):
+        raise ValueError("receipt_template.sections must contain mappings")
+
+    template = ReceiptTemplateConfig(
+        sections=tuple(
+            ReceiptTemplateSection(
+                type=str(section.get("type", "")).strip(),
+                value=(
+                    str(section["value"]) if section.get("value") is not None else None
+                ),
+                align=str(section.get("align", "left")).strip().lower(),
+                font=str(section.get("font", "a")).strip().lower(),
+                width=int(section.get("width", 1)),
+                height=int(section.get("height", 1)),
+                bold=bool(section.get("bold", False)),
+                underline=int(section.get("underline", 0)),
+                scale=float(section.get("scale", 1.0)),
+                trailing_blank=bool(section.get("trailing_blank", True)),
+            )
+            for section in sections_raw
+        )
+    )
+    validate_receipt_template(template)
+    return template
+
+
+def validate_receipt_template(template: ReceiptTemplateConfig) -> None:
+    allowed_types = {"blank", "logo", "separator", "tasks", "text"}
+    allowed_alignments = {"left", "center", "right"}
+    allowed_fonts = {"a", "b"}
+    for section in template.sections:
+        if section.type not in allowed_types:
+            raise ValueError(
+                f"unsupported receipt_template section type: {section.type}"
+            )
+        if section.type == "text" and section.value is None:
+            raise ValueError("receipt_template text sections require value")
+        if section.align not in allowed_alignments:
+            raise ValueError(f"unsupported receipt_template alignment: {section.align}")
+        if section.font not in allowed_fonts:
+            raise ValueError(f"unsupported receipt_template font: {section.font}")
+        if not 1 <= section.width <= 8:
+            raise ValueError("receipt_template section width must be between 1 and 8")
+        if not 1 <= section.height <= 8:
+            raise ValueError("receipt_template section height must be between 1 and 8")
+        if section.underline not in {0, 1, 2}:
+            raise ValueError("receipt_template section underline must be 0, 1, or 2")
+        if section.scale <= 0:
+            raise ValueError("receipt_template section scale must be positive")
+
 
 def validate_printer_config(printer: PrinterConfig) -> None:
     if printer.type != "network_escpos":
@@ -207,6 +298,7 @@ def config_to_raw(config: AppConfig) -> dict[str, Any]:
         "ui": asdict(config.ui),
         "crewday": asdict(config.crewday),
         "print_schedule": asdict(config.print_schedule),
+        "receipt_template": asdict(config.receipt_template),
         "printer": asdict(config.printer),
         "workers": [asdict(worker) for worker in config.workers],
     }

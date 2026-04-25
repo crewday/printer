@@ -4,7 +4,13 @@ from dataclasses import replace
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from printer_app.models import PrinterConfig, ReceiptTask, TaskBatch
+from printer_app.models import (
+    PrinterConfig,
+    ReceiptTask,
+    ReceiptTemplateConfig,
+    ReceiptTemplateSection,
+    TaskBatch,
+)
 from printer_app.renderer import (
     receipt_text_preview,
     render_font_test,
@@ -111,6 +117,37 @@ def test_receipt_preview_uses_configured_print_width() -> None:
     assert preview.png.startswith(b"\x89PNG")
     assert preview.width_dots == 48 * 12
     assert preview.height_dots > 0
+
+
+def test_receipt_template_can_override_receipt_sections() -> None:
+    now = datetime(2026, 4, 25, 8, 30, tzinfo=ZoneInfo("Asia/Dubai"))
+    batch = TaskBatch(
+        worker_name="Vincent",
+        source_label="Mock tasks",
+        generated_at=now,
+        tasks=(ReceiptTask(id="1", title="Prepare Villa Sud"),),
+    )
+    template = ReceiptTemplateConfig(
+        sections=(
+            ReceiptTemplateSection(
+                type="text",
+                value="{{ brand }} for {{ worker_name }} ({{ task_count }})",
+                align="center",
+                bold=True,
+            ),
+            ReceiptTemplateSection(type="separator", trailing_blank=False),
+            ReceiptTemplateSection(type="tasks"),
+        )
+    )
+
+    payload = render_receipt(batch, _printer(), now, template)
+    preview = receipt_text_preview(batch, now, 48, template)
+
+    assert b"crew.day for Vincent (1)" in payload
+    assert b"Printed on April 25th, 2026" not in payload
+    assert b"Prepare Villa Sud" in payload
+    assert "crew.day for Vincent (1)" in preview
+    assert "Printed on April 25th, 2026" not in preview
 
 
 def test_font_test_renders_escpos_feature_commands() -> None:

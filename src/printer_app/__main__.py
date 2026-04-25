@@ -19,7 +19,7 @@ def print_test(config_path: Path, dry_run: bool, worker_name: str | None) -> int
     worker = select_worker(config.workers, worker_name)
     now = datetime.now(ZoneInfo(worker.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
-    payload = render_receipt(batch, config.printer, now)
+    payload = render_receipt(batch, config.printer, now, config.receipt_template)
 
     if dry_run:
         sys.stdout.buffer.write(payload)
@@ -39,7 +39,14 @@ def preview(config_path: Path, worker_name: str | None) -> int:
     worker = select_worker(config.workers, worker_name)
     now = datetime.now(ZoneInfo(worker.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
-    print(receipt_text_preview(batch, now, config.printer.paper_columns))
+    print(
+        receipt_text_preview(
+            batch,
+            now,
+            config.printer.paper_columns,
+            config.receipt_template,
+        )
+    )
     return 0
 
 

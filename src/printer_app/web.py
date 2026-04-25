@@ -20,13 +20,16 @@ from pydantic import BaseModel
 from printer_app import escpos
 from printer_app.auth import configured_password_hash, verify_password
 from printer_app.config import (
+    DEFAULT_RECEIPT_TEMPLATE,
     config_path_from_env,
     config_to_raw,
+    default_receipt_template,
     load_config,
+    parse_receipt_template,
     write_raw_config,
 )
 from printer_app.cron import cron_matches
-from printer_app.models import AppConfig, PrinterProfile
+from printer_app.models import AppConfig, PrinterProfile, ReceiptTemplateConfig
 from printer_app.profiles import get_profile, load_profiles
 from printer_app.renderer import (
     render_black_test,
@@ -80,6 +83,23 @@ class PrintReceiptsRequest(BaseModel):
     workers: list[str] | None = None
 
 
+class TemplateSectionPayload(BaseModel):
+    type: str
+    value: str | None = None
+    align: str = "left"
+    font: str = "a"
+    width: int = 1
+    height: int = 1
+    bold: bool = False
+    underline: int = 0
+    scale: float = 1.0
+    trailing_blank: bool = True
+
+
+class TemplatePayload(BaseModel):
+    sections: list[TemplateSectionPayload]
+
+
 def require_auth(
     credentials: Annotated[HTTPBasicCredentials, Depends(security)],
 ) -> None:
@@ -103,7 +123,7 @@ def require_auth(
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLResponse:
     config = load_config(config_path_from_env())
-    preview = _preview_for_first_worker(config)
+    preview = _preview_for_first_worker(config, config.receipt_template)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -115,6 +135,8 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
             "all_code_pages": sorted(escpos.CODE_PAGES),
             "preview": preview,
             "results": list(reversed(RECENT_RESULTS[-8:])),
+            "template_data": _template_to_payload(config.receipt_template),
+            "default_template_data": _template_to_payload(default_receipt_template()),
         },
     )
 
@@ -169,7 +191,7 @@ def dry_run(_: Annotated[None, Depends(require_auth)]) -> Response:
     worker = config.workers[0]
     now = datetime.now(ZoneInfo(worker.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
-    payload = render_receipt(batch, config.printer, now)
+    payload = render_receipt(batch, config.printer, now, config.receipt_template)
     _record(f"Rendered {len(payload)} receipt bytes without printing.")
     return Response(payload, media_type="application/octet-stream")
 
@@ -213,6 +235,42 @@ def print_receipts_api(
     return result
 
 
+@app.post("/api/template/preview")
+def template_preview(
+    _: Annotated[None, Depends(require_auth)],
+    payload: TemplatePayload,
+) -> dict[str, object]:
+    config = load_config(config_path_from_env())
+    template = _payload_to_template(payload)
+    preview = _preview_for_first_worker(config, template)
+    return preview
+
+
+@app.post("/api/template/save")
+def template_save(
+    _: Annotated[None, Depends(require_auth)],
+    payload: TemplatePayload,
+) -> dict[str, object]:
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    raw["receipt_template"] = {
+        "sections": [_payload_section_to_raw(section) for section in payload.sections]
+    }
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _record(f"Saved receipt template ({len(payload.sections)} sections).")
+    return {"status": "saved", "sections": len(payload.sections)}
+
+
+@app.get("/api/template/default")
+def template_default(
+    _: Annotated[None, Depends(require_auth)],
+) -> dict[str, object]:
+    return _template_to_payload(default_receipt_template())
+
+
 @app.post("/black-test")
 def black_test(
     _: Annotated[None, Depends(require_auth)],
@@ -247,16 +305,69 @@ def font_test(_: Annotated[None, Depends(require_auth)]) -> RedirectResponse:
     return RedirectResponse("/", status_code=303)
 
 
-def _preview_for_first_worker(config: AppConfig) -> dict[str, str | int]:
+def _preview_for_first_worker(
+    config: AppConfig,
+    template: ReceiptTemplateConfig,
+) -> dict[str, str | int]:
     worker = config.workers[0]
     now = datetime.now(ZoneInfo(worker.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
-    preview = render_receipt_preview(batch, config.printer, now)
+    preview = render_receipt_preview(
+        batch,
+        config.printer,
+        now,
+        template,
+    )
     encoded = b64encode(preview.png).decode("ascii")
     return {
         "src": f"data:image/png;base64,{encoded}",
         "width_dots": preview.width_dots,
         "height_dots": preview.height_dots,
+    }
+
+
+def _payload_to_template(payload: TemplatePayload) -> ReceiptTemplateConfig:
+    raw = {"sections": [_payload_section_to_raw(s) for s in payload.sections]}
+    try:
+        return parse_receipt_template(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _payload_section_to_raw(section: TemplateSectionPayload) -> dict[str, object]:
+    raw: dict[str, object] = {
+        "type": section.type,
+        "align": section.align,
+        "font": section.font,
+        "width": section.width,
+        "height": section.height,
+        "bold": section.bold,
+        "underline": section.underline,
+        "scale": section.scale,
+        "trailing_blank": section.trailing_blank,
+    }
+    if section.value is not None:
+        raw["value"] = section.value
+    return raw
+
+
+def _template_to_payload(template: ReceiptTemplateConfig) -> dict[str, object]:
+    return {
+        "sections": [
+            {
+                "type": section.type,
+                "value": section.value,
+                "align": section.align,
+                "font": section.font,
+                "width": section.width,
+                "height": section.height,
+                "bold": section.bold,
+                "underline": section.underline,
+                "scale": section.scale,
+                "trailing_blank": section.trailing_blank,
+            }
+            for section in template.sections
+        ]
     }
 
 
@@ -295,8 +406,10 @@ def _requested_worker_names(
     request: PrintReceiptsRequest | None,
     query_workers: list[str] | None,
 ) -> list[str] | None:
-    raw_workers = query_workers if query_workers is not None else (
-        request.workers if request else None
+    raw_workers = (
+        query_workers
+        if query_workers is not None
+        else (request.workers if request else None)
     )
     if not raw_workers:
         return None
@@ -318,7 +431,7 @@ def _print_worker_receipts(
     for worker in workers:
         now = datetime.now(ZoneInfo(worker.timezone))
         batch = task_source.fetch_task_batch(worker, now=now)
-        payload += render_receipt(batch, printer, now)
+        payload += render_receipt(batch, printer, now, config.receipt_template)
 
     send_to_network_printer(bytes(payload), printer)
     return {

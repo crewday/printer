@@ -346,11 +346,90 @@
         </div>
       </div>
 
+      <section class="panel composer" id="composer-panel">
+        <div class="panel__head composer__head">
+          <div class="panel__head-stack">
+            <span class="panel__eyebrow">Composer</span>
+            <h2 class="panel__title">Receipt <em>template</em></h2>
+            <p class="panel__sub">
+              Lift blocks from the typecase onto the slug. Adjust modifiers,
+              generate a fresh preview, and save when the layout reads right
+              on the paper above.
+            </p>
+          </div>
+          <div class="composer__head-actions">
+            <span class="chip chip--sand"><span class="dot dot--sand"></span><span id="composer-dirty">unsaved · loaded</span></span>
+            <button type="button" class="btn btn--ghost btn--sm" id="composer-reset" title="Discard edits and load the bundled default">
+              Reset to default
+            </button>
+          </div>
+        </div>
+
+        <div class="composer__grid">
+          <aside class="composer__rail composer__rail--palette" aria-label="Available block types">
+            <header class="composer__rail-head">
+              <span class="composer__eyebrow">Typecase</span>
+              <span class="composer__rail-hint">drag &middot; click to add</span>
+            </header>
+            <ul class="palette" id="composer-palette" role="list"></ul>
+            <p class="composer__rail-foot">
+              {% raw %}Text blocks accept Jinja: <code>{{ worker_name }}</code>,
+              <code>{{ display_date }}</code>,
+              <code>{{ task_count }}</code>.{% endraw %}
+            </p>
+          </aside>
+
+          <section class="composer__rail composer__rail--stage" aria-label="Receipt blocks in order">
+            <header class="composer__rail-head">
+              <span class="composer__eyebrow">Setting stick</span>
+              <span class="composer__rail-hint">
+                <span id="composer-count">0 blocks</span>
+                <span class="composer__sep" aria-hidden="true">·</span>
+                top &rarr; bottom prints first &rarr; last
+              </span>
+            </header>
+            <ol class="dropzone" id="composer-dropzone" role="list" aria-live="polite"></ol>
+            <p class="composer__rail-foot composer__rail-foot--center">
+              drag a block to reorder &middot;
+              <span class="composer__keys">✕</span> to remove &middot;
+              click <span class="composer__keys">A · B · 2×</span> to toggle modifiers
+            </p>
+          </section>
+        </div>
+
+        <div class="composer__bar">
+          <p class="composer__status" id="composer-status">
+            Drag a block from the typecase to begin, or tap to drop it at the bottom.
+          </p>
+          <div class="btn-group">
+            <button type="button" class="btn btn--ghost" id="composer-preview" title="Render the preview above using this layout, without saving">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              Preview without saving
+            </button>
+            <button type="button" class="btn btn--moss" id="composer-save" title="Persist this layout to the YAML config">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+              Save template
+            </button>
+          </div>
+        </div>
+      </section>
+
       <footer class="colophon">
         <span><strong>crew.day</strong> printer · ESC/POS over TCP</span>
         <span>config &middot; YAML bind mount</span>
       </footer>
     </main>
+
+    <script type="application/json" id="composer-bootstrap">
+      {{ {"current": template_data, "default": default_template_data} | tojson }}
+    </script>
 
     <script>
       (function () {
@@ -422,5 +501,6 @@
         });
       })();
     </script>
+    <script src="/static/template-editor.js" defer></script>
   </body>
 </html>

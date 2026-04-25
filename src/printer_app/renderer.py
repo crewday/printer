@@ -9,10 +9,17 @@ from io import BytesIO
 from textwrap import wrap
 
 import cairosvg
+from jinja2 import Environment, StrictUndefined
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from printer_app import escpos
-from printer_app.models import PrinterConfig, ReceiptTask, TaskBatch
+from printer_app.models import (
+    PrinterConfig,
+    ReceiptTask,
+    ReceiptTemplateConfig,
+    ReceiptTemplateSection,
+    TaskBatch,
+)
 
 BRAND = "crew.day"
 RULE_THICKNESS_DOTS = 2
@@ -28,6 +35,8 @@ FONT_B_CELL_WIDTH_DOTS = 9
 FONT_B_CELL_HEIGHT_DOTS = 20
 TEXT_CELL_WIDTH_DOTS = FONT_A_CELL_WIDTH_DOTS
 TEXT_CELL_HEIGHT_DOTS = FONT_A_CELL_HEIGHT_DOTS
+ALIGNMENTS = {"left": b"\x00", "center": b"\x01", "right": b"\x02"}
+TEMPLATE_ENV = Environment(autoescape=False, undefined=StrictUndefined)
 
 
 @dataclass(frozen=True)
@@ -52,8 +61,39 @@ class PreviewFont:
     cell_height_dots: int
 
 
-def render_receipt(batch: TaskBatch, printer: PrinterConfig, now: datetime) -> bytes:
-    columns = printer.paper_columns
+DEFAULT_RECEIPT_TEMPLATE = ReceiptTemplateConfig(
+    sections=(
+        ReceiptTemplateSection(type="logo", align="center"),
+        ReceiptTemplateSection(
+            type="text",
+            value="{{ worker_name }}, {{ display_date }}",
+            align="center",
+            font="b",
+            width=2,
+            height=2,
+            bold=True,
+        ),
+        ReceiptTemplateSection(
+            type="text",
+            value="Printed on {{ display_datetime }}",
+            align="center",
+            font="b",
+        ),
+        ReceiptTemplateSection(type="separator", align="center"),
+        ReceiptTemplateSection(type="tasks"),
+        ReceiptTemplateSection(type="separator", align="center", trailing_blank=False),
+        ReceiptTemplateSection(type="logo", align="center", scale=0.5),
+    )
+)
+
+
+def render_receipt(
+    batch: TaskBatch,
+    printer: PrinterConfig,
+    now: datetime,
+    template: ReceiptTemplateConfig | None = None,
+) -> bytes:
+    template = template or DEFAULT_RECEIPT_TEMPLATE
     output = bytearray()
 
     output += escpos.command(escpos.ESC, b"@")
@@ -62,41 +102,8 @@ def render_receipt(batch: TaskBatch, printer: PrinterConfig, now: datetime) -> b
         output += escpos.select_print_density(printer.print_density)
     if printer.supports_print_speed:
         output += escpos.select_print_speed(printer.print_speed)
-    output += escpos.command(escpos.ESC, b"a", b"\x01")
-    if printer.image_logo:
-        output += _logo_bytes(columns)
-
-    output += _render_centered_text(
-        _receipt_heading(batch, now),
-        columns,
-        printer.code_page,
-        font="b",
-        width=2,
-        height=2,
-        bold=True,
-    )
-
-    output += _render_centered_text(
-        _printed_on_line(now),
-        columns,
-        printer.code_page,
-        font="b",
-    )
-    output += _rule(columns, printer.code_page)
-    output += escpos.command(escpos.ESC, b"a", b"\x00")
-    output += escpos.select_font("a")
-    if batch.tasks:
-        for index, task in enumerate(batch.tasks, start=1):
-            output += _render_task(index, task, columns, printer.code_page)
-    else:
-        output += escpos.text("No tasks for this print window.", printer.code_page)
-        output += escpos.text("", printer.code_page)
-
-    output += _rule(columns, printer.code_page, trailing_blank=False)
-    output += escpos.command(escpos.ESC, b"a", b"\x01")
-    if printer.image_logo:
-        output += _logo_bytes(columns, scale=0.5)
-    output += escpos.text("", printer.code_page)
+    for section in template.sections:
+        output += _render_template_section(section, batch, printer, now)
 
     if printer.cut:
         output += escpos.cut()
@@ -104,9 +111,12 @@ def render_receipt(batch: TaskBatch, printer: PrinterConfig, now: datetime) -> b
 
 
 def render_receipt_preview(
-    batch: TaskBatch, printer: PrinterConfig, now: datetime
+    batch: TaskBatch,
+    printer: PrinterConfig,
+    now: datetime,
+    template: ReceiptTemplateConfig | None = None,
 ) -> ReceiptPreview:
-    payload = render_receipt(batch, printer, now)
+    payload = render_receipt(batch, printer, now, template)
     width_dots = printer.paper_columns * RULE_DOTS_PER_COLUMN
     image = _escpos_payload_to_image(
         payload,
@@ -299,19 +309,129 @@ def _bitmap_test_bytes() -> bytes:
     return escpos.raster_image(image)
 
 
-def receipt_text_preview(batch: TaskBatch, now: datetime, columns: int) -> str:
-    lines = [
-        BRAND.center(columns),
-        _receipt_heading(batch, now).center(columns),
-        _printed_on_line(now).center(columns),
-        _preview_rule(columns),
-    ]
-    for index, task in enumerate(batch.tasks, start=1):
-        lines.extend(_task_preview_lines(index, task, columns))
-    if not batch.tasks:
-        lines.append("No tasks for this print window.")
-    lines.extend([_preview_rule(columns), BRAND.center(columns)])
+def receipt_text_preview(
+    batch: TaskBatch,
+    now: datetime,
+    columns: int,
+    template: ReceiptTemplateConfig | None = None,
+) -> str:
+    template = template or DEFAULT_RECEIPT_TEMPLATE
+    lines: list[str] = []
+    for section in template.sections:
+        lines.extend(_preview_template_section(section, batch, now, columns))
     return "\n".join(lines)
+
+
+def _render_template_section(
+    section: ReceiptTemplateSection,
+    batch: TaskBatch,
+    printer: PrinterConfig,
+    now: datetime,
+) -> bytes:
+    columns = printer.paper_columns
+    code_page = printer.code_page
+    match section.type:
+        case "blank":
+            return escpos.text("", code_page)
+        case "logo":
+            if not printer.image_logo:
+                return b""
+            return escpos.command(escpos.ESC, b"a", b"\x01") + _logo_bytes(
+                columns, scale=section.scale
+            )
+        case "separator":
+            return _rule(columns, code_page, trailing_blank=section.trailing_blank)
+        case "tasks":
+            output = bytearray()
+            output += escpos.command(escpos.ESC, b"a", b"\x00")
+            output += escpos.select_font("a")
+            if batch.tasks:
+                for index, task in enumerate(batch.tasks, start=1):
+                    output += _render_task(index, task, columns, code_page)
+            else:
+                output += escpos.text("No tasks for this print window.", code_page)
+                output += escpos.text("", code_page)
+            return bytes(output)
+        case "text":
+            return _render_template_text(section, batch, now, columns, code_page)
+        case _:
+            raise ValueError(f"unsupported receipt template section: {section.type}")
+
+
+def _render_template_text(
+    section: ReceiptTemplateSection,
+    batch: TaskBatch,
+    now: datetime,
+    columns: int,
+    code_page: str,
+) -> bytes:
+    value = _render_template_value(section.value or "", batch, now)
+    max_chars = _font_columns(columns, section.font, section.width)
+    lines = tuple(
+        line for raw in value.splitlines() for line in _wrapped(raw, max_chars)
+    )
+    output = bytearray()
+    output += escpos.command(escpos.ESC, b"a", ALIGNMENTS[section.align])
+    output += escpos.select_font(section.font)
+    output += escpos.select_text_size(width=section.width, height=section.height)
+    output += escpos.bold(section.bold)
+    if section.underline:
+        output += escpos.underline(section.underline)
+    output += _render_lines(lines, code_page)
+    if section.underline:
+        output += escpos.underline(0)
+    output += escpos.bold(False)
+    output += escpos.select_text_size()
+    return bytes(output)
+
+
+def _preview_template_section(
+    section: ReceiptTemplateSection,
+    batch: TaskBatch,
+    now: datetime,
+    columns: int,
+) -> list[str]:
+    match section.type:
+        case "blank":
+            return [""]
+        case "logo":
+            return [_aligned_preview_line(BRAND, columns, "center")]
+        case "separator":
+            lines = [_preview_rule(columns)]
+            if section.trailing_blank:
+                lines.append("")
+            return lines
+        case "tasks":
+            lines: list[str] = []
+            for index, task in enumerate(batch.tasks, start=1):
+                lines.extend(_task_preview_lines(index, task, columns))
+            if not batch.tasks:
+                lines.append("No tasks for this print window.")
+            return lines
+        case "text":
+            value = _render_template_value(section.value or "", batch, now)
+            max_chars = _font_columns(columns, section.font, section.width)
+            return [
+                _aligned_preview_line(line, columns, section.align)
+                for raw in value.splitlines()
+                for line in _wrapped(raw, max_chars)
+            ]
+        case _:
+            raise ValueError(f"unsupported receipt template section: {section.type}")
+
+
+def _render_template_value(value: str, batch: TaskBatch, now: datetime) -> str:
+    template = TEMPLATE_ENV.from_string(value)
+    return template.render(
+        brand=BRAND,
+        worker_name=batch.worker_name,
+        source_label=batch.source_label,
+        task_count=len(batch.tasks),
+        display_date=_display_date(now),
+        display_datetime=_display_datetime(now),
+        printed_at=now,
+        generated_at=batch.generated_at,
+    )
 
 
 def _render_task(index: int, task: ReceiptTask, columns: int, code_page: str) -> bytes:
@@ -328,13 +448,10 @@ def _render_task(index: int, task: ReceiptTask, columns: int, code_page: str) ->
 
 
 def _rule(columns: int, code_page: str, *, trailing_blank: bool = True) -> bytes:
-    output = (
-        escpos.command(escpos.ESC, b"a", b"\x00")
-        + escpos.horizontal_rule(
-            columns,
-            dots_per_column=RULE_DOTS_PER_COLUMN,
-            thickness_dots=RULE_THICKNESS_DOTS,
-        )
+    output = escpos.command(escpos.ESC, b"a", b"\x00") + escpos.horizontal_rule(
+        columns,
+        dots_per_column=RULE_DOTS_PER_COLUMN,
+        thickness_dots=RULE_THICKNESS_DOTS,
     )
     if trailing_blank:
         output += escpos.text("", code_page)
@@ -492,6 +609,14 @@ def _preview_rule(columns: int) -> str:
     return "=" * columns
 
 
+def _aligned_preview_line(value: str, columns: int, align: str) -> str:
+    if align == "center":
+        return value.center(columns)
+    if align == "right":
+        return value.rjust(columns)
+    return value
+
+
 def _escpos_payload_to_image(
     payload: bytes,
     width_dots: int,
@@ -501,6 +626,7 @@ def _escpos_payload_to_image(
     fonts = _preview_fonts()
     alignment = 0
     bold = False
+    underline = 0
     font_name = "a"
     width_multiplier = 1
     height_multiplier = 1
@@ -523,6 +649,7 @@ def _escpos_payload_to_image(
             preview_font.cell_height_dots,
             width_multiplier,
             height_multiplier,
+            underline,
         )
         content_width = _text_content_width(
             line,
@@ -548,6 +675,7 @@ def _escpos_payload_to_image(
                 flush_text()
                 alignment = 0
                 bold = False
+                underline = 0
                 font_name = "a"
                 width_multiplier = 1
                 height_multiplier = 1
@@ -561,6 +689,11 @@ def _escpos_payload_to_image(
             if command == 0x45 and i + 2 < len(payload):
                 flush_text()
                 bold = payload[i + 2] != 0
+                i += 3
+                continue
+            if command == 0x2D and i + 2 < len(payload):
+                flush_text()
+                underline = payload[i + 2]
                 i += 3
                 continue
             if command == 0x4D and i + 2 < len(payload):
@@ -659,6 +792,7 @@ def _text_line_to_image(
     cell_height_dots: int,
     width_multiplier: int,
     height_multiplier: int,
+    underline: int = 0,
 ) -> Image.Image:
     max_chars = _preview_text_columns(columns, cell_width_dots, width_multiplier)
     base = Image.new(
@@ -670,6 +804,15 @@ def _text_line_to_image(
     for col, char in enumerate(line[:max_chars]):
         x = col * cell_width_dots
         draw.text((x, 1), char, font=font, fill=0)
+    if underline and line:
+        visible = min(len(line), max_chars)
+        if visible:
+            line_y = cell_height_dots - underline - 1
+            draw.line(
+                (0, line_y, visible * cell_width_dots - 1, line_y),
+                fill=0,
+                width=underline,
+            )
     if width_multiplier == 1 and height_multiplier == 1:
         return base
     return base.resize(

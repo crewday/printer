@@ -6,6 +6,29 @@ The first slice is a containerized ESC/POS probe that can dry-run render a sampl
 
 Printer profiles live in `src/printer_app/profiles/*.yaml`. A profile declares preset columns, cut behavior, supported code pages, image/logo support, and whether density/speed ESC/POS commands should be sent. Add a printer preset by dropping another YAML file in that folder.
 
+## Receipt Templates
+
+Receipts use a YAML `receipt_template` section. Existing configs without this section keep the built-in default layout. The default is equivalent to the current receipt: logo, worker/date heading, printed timestamp, separator, task list, separator, footer logo, and a final blank line.
+
+Template text values use Jinja variables such as `brand`, `worker_name`, `display_date`, `display_datetime`, `source_label`, and `task_count`.
+
+```yaml
+receipt_template:
+  sections:
+    - type: text
+      value: "{{ worker_name }} - {{ display_date }}"
+      align: center
+      font: b
+      width: 2
+      height: 2
+      bold: true
+    - type: separator
+    - type: tasks
+    - type: blank
+```
+
+Supported section types are `logo`, `text`, `separator`, `tasks`, and `blank`. Open the password-protected web UI's Composer pane to drag blocks onto the receipt and persist the result back to YAML. The `tasks` section keeps the standard compact task rendering with metadata and checklist items.
+
 ## Commands
 
 Build the image:

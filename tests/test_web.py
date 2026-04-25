@@ -123,3 +123,109 @@ def test_api_print_rejects_unknown_worker(tmp_path: Path, monkeypatch) -> None:
 
     assert response.status_code == 404
     assert "Missing" in response.json()["detail"]
+
+
+def test_template_default_returns_bundled_sections(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.get("/api/template/default", auth=("admin", "admin"))
+
+    assert response.status_code == 200
+    sections = response.json()["sections"]
+    assert any(s["type"] == "tasks" for s in sections)
+    assert all("underline" in s for s in sections)
+
+
+def test_template_preview_returns_png(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/api/template/preview",
+        json={
+            "sections": [
+                {
+                    "type": "text",
+                    "value": "Hello {{ worker_name }}",
+                    "align": "center",
+                    "bold": True,
+                    "underline": 1,
+                },
+                {"type": "separator"},
+                {"type": "tasks"},
+            ]
+        },
+        auth=("admin", "admin"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["src"].startswith("data:image/png;base64,")
+    assert body["width_dots"] > 0
+    assert body["height_dots"] > 0
+
+
+def test_template_preview_rejects_invalid_underline(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/api/template/preview",
+        json={"sections": [{"type": "text", "value": "x", "underline": 3}]},
+        auth=("admin", "admin"),
+    )
+
+    assert response.status_code == 400
+    assert "underline" in response.json()["detail"]
+
+
+def test_template_save_round_trips_to_yaml(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/api/template/save",
+        json={
+            "sections": [
+                {
+                    "type": "text",
+                    "value": "Saved layout",
+                    "align": "right",
+                    "underline": 2,
+                },
+                {"type": "tasks"},
+            ]
+        },
+        auth=("admin", "admin"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "saved"
+
+    from printer_app.config import load_config
+
+    reloaded = load_config(config_path)
+    assert len(reloaded.receipt_template.sections) == 2
+    assert reloaded.receipt_template.sections[0].value == "Saved layout"
+    assert reloaded.receipt_template.sections[0].align == "right"
+    assert reloaded.receipt_template.sections[0].underline == 2
+    assert reloaded.receipt_template.sections[1].type == "tasks"

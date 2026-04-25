@@ -8,6 +8,73 @@ crewday:
   workspace_id: null
 print_schedule:
   cron: ''
+receipt_template:
+  sections:
+  - type: logo
+    align: center
+    font: a
+    width: 1
+    height: 1
+    bold: false
+    underline: 0
+    scale: 1.0
+    trailing_blank: true
+  - type: text
+    align: center
+    font: b
+    width: 2
+    height: 2
+    bold: true
+    underline: 0
+    scale: 1.0
+    trailing_blank: true
+    value: '{{ worker_name }}, {{ display_date }}'
+  - type: text
+    align: center
+    font: b
+    width: 1
+    height: 1
+    bold: false
+    underline: 0
+    scale: 1.0
+    trailing_blank: true
+    value: Printed on {{ display_datetime }}
+  - type: separator
+    align: center
+    font: a
+    width: 1
+    height: 1
+    bold: false
+    underline: 0
+    scale: 1.0
+    trailing_blank: true
+  - type: tasks
+    align: left
+    font: a
+    width: 1
+    height: 1
+    bold: false
+    underline: 0
+    scale: 1.0
+    trailing_blank: true
+  - type: separator
+    align: center
+    font: a
+    width: 1
+    height: 1
+    bold: false
+    underline: 0
+    scale: 1.0
+    trailing_blank: false
+  - type: logo
+    align: center
+    font: a
+    width: 1
+    height: 1
+    bold: false
+    underline: 0
+    scale: 0.5
+    trailing_blank: true
 printer:
   type: network_escpos
   profile: epson_tm_t20ii

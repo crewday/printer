@@ -58,6 +58,25 @@ class PrintScheduleConfig:
 
 
 @dataclass(frozen=True)
+class ReceiptTemplateSection:
+    type: str
+    value: str | None = None
+    align: str = "left"
+    font: str = "a"
+    width: int = 1
+    height: int = 1
+    bold: bool = False
+    underline: int = 0
+    scale: float = 1.0
+    trailing_blank: bool = True
+
+
+@dataclass(frozen=True)
+class ReceiptTemplateConfig:
+    sections: tuple[ReceiptTemplateSection, ...]
+
+
+@dataclass(frozen=True)
 class WorkerConfig:
     name: str
     schedule: str
@@ -72,6 +91,7 @@ class AppConfig:
     printer: PrinterConfig
     crewday: CrewdayConfig
     print_schedule: PrintScheduleConfig
+    receipt_template: ReceiptTemplateConfig
     workers: tuple[WorkerConfig, ...]
 
 
