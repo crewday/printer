@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from printer_app.config import config_to_raw, ensure_config, load_config
 
 
@@ -18,6 +20,7 @@ def test_ensure_config_creates_yaml(tmp_path: Path) -> None:
     assert config.printer.supports_print_density is True
     assert config.printer.supports_print_speed is True
     assert config.crewday.source == "mock"
+    assert config.crewday.workspace_slug is None
     assert config.print_schedule.cron == ""
     assert config.receipt_template.sections[0].type == "logo"
     assert config.receipt_template.sections[4].type == "tasks"
@@ -196,6 +199,51 @@ workers:
 
     assert config.printer.paper_columns == 48
     assert config.printer.code_page == "cp858"
+
+
+def test_config_encrypts_stored_secrets_when_key_is_set(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("PRINTER_CONFIG_SECRET_KEY", "test-secret-key")
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+  password_hash: pbkdf2_sha256$200000$salt$digest
+crewday:
+  source: crewday_http
+  base_url: http://crewday:8000
+  api_token: mip_key_secret
+  workspace_slug: home
+printer:
+  type: network_escpos
+  profile: epson_tm_t20ii
+  host: 127.0.0.1
+  port: 9100
+  timeout_seconds: 5
+workers:
+  - name: Amina
+    crewday_user_id: 01HXUSER
+    tasks:
+      - Check arrivals
+""",
+        encoding="utf-8",
+    )
+
+    from printer_app.config import write_raw_config
+
+    config = load_config(path)
+    write_raw_config(path, config_to_raw(config))
+    stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+    assert stored["ui"]["username"].startswith("enc:v1:")
+    assert stored["ui"]["password_hash"].startswith("enc:v1:")
+    assert stored["crewday"]["api_token"].startswith("enc:v1:")
+    assert load_config(path).ui.username == "admin"
+    assert load_config(path).crewday.api_token == "mip_key_secret"
+    assert load_config(path).crewday.workspace_slug == "home"
     assert config.printer.cut is True
 
 

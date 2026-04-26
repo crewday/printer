@@ -49,6 +49,7 @@ class CrewdayConfig:
     source: str
     base_url: str
     api_token: str | None
+    workspace_slug: str | None
     workspace_id: str | None
 
 

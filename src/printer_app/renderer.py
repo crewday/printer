@@ -86,6 +86,8 @@ DEFAULT_RECEIPT_TEMPLATE = ReceiptTemplateConfig(
     )
 )
 
+CalibrationSetting = tuple[int, int]
+
 
 def render_receipt(
     batch: TaskBatch,
@@ -180,6 +182,53 @@ def render_black_test(printer: PrinterConfig) -> bytes:
     output += escpos.text("", printer.code_page)
     output += escpos.text("", printer.code_page)
 
+    if printer.cut:
+        output += escpos.cut()
+    return bytes(output)
+
+
+def render_calibration_sweep(
+    printer: PrinterConfig,
+    settings: tuple[CalibrationSetting, ...],
+    title: str,
+) -> bytes:
+    output = bytearray()
+    columns = printer.paper_columns
+
+    output += escpos.command(escpos.ESC, b"@")
+    output += escpos.select_code_page(printer.code_page)
+    output += escpos.command(escpos.ESC, b"a", b"\x01")
+    output += escpos.bold(True)
+    output += escpos.text(title.upper(), printer.code_page)
+    output += escpos.bold(False)
+    output += escpos.command(escpos.ESC, b"a", b"\x00")
+    output += escpos.text("Pick the first dark readable sample.", printer.code_page)
+    output += escpos.text("", printer.code_page)
+
+    for index, (density, speed) in enumerate(settings, start=1):
+        if printer.supports_print_density:
+            output += escpos.select_print_density(density)
+        if printer.supports_print_speed:
+            output += escpos.select_print_speed(speed)
+        output += escpos.bold(True)
+        output += escpos.text(
+            f"{index}. density={density} speed={speed}",
+            printer.code_page,
+        )
+        output += escpos.bold(False)
+        output += escpos.text(
+            "Readable task text 0123456789".ljust(columns)[:columns],
+            printer.code_page,
+        )
+        output += escpos.reverse_bar(columns, "DARK BAR", printer.code_page)
+        output += escpos.filled_raster_block(width_bytes=10, height_dots=16)
+        output += escpos.text("", printer.code_page)
+
+    output += escpos.select_font("a")
+    output += escpos.select_text_size()
+    output += escpos.bold(False)
+    output += escpos.underline(0)
+    output += escpos.text("", printer.code_page)
     if printer.cut:
         output += escpos.cut()
     return bytes(output)

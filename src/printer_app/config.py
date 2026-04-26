@@ -21,6 +21,7 @@ from printer_app.models import (
     WorkerConfig,
 )
 from printer_app.profiles import default_profile, get_profile, profile_ids
+from printer_app.secrets import decrypt_secret, encrypt_secret, is_encrypted_secret
 
 DEFAULT_CONFIG_PATH = Path("/config/printer.yaml")
 
@@ -68,6 +69,7 @@ def default_config() -> dict[str, Any]:
             "source": "mock",
             "base_url": "http://crewday:8000",
             "api_token": crewday_token,
+            "workspace_slug": None,
             "workspace_id": None,
         },
         "print_schedule": {
@@ -133,14 +135,18 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
 
     ui = UIConfig(
         username=str(
-            os.environ.get("PRINTER_UI_USERNAME") or ui_raw.get("username", "admin")
+            os.environ.get("PRINTER_UI_USERNAME")
+            or decrypt_secret(ui_raw.get("username", "admin"))
         ),
-        password_hash=ui_raw.get("password_hash"),
+        password_hash=decrypt_secret(ui_raw.get("password_hash")),
     )
     crewday = CrewdayConfig(
         source=str(crewday_raw.get("source", "mock")),
         base_url=str(crewday_raw.get("base_url", "http://crewday:8000")).rstrip("/"),
-        api_token=os.environ.get("CREWDAY_API_TOKEN") or crewday_raw.get("api_token"),
+        api_token=os.environ.get("CREWDAY_API_TOKEN")
+        or decrypt_secret(crewday_raw.get("api_token")),
+        workspace_slug=crewday_raw.get("workspace_slug")
+        or crewday_raw.get("workspace_id"),
         workspace_id=crewday_raw.get("workspace_id"),
     )
     print_schedule = PrintScheduleConfig(
@@ -280,6 +286,7 @@ def write_config(path: Path, config: AppConfig) -> None:
 
 def write_raw_config(path: Path, raw: dict[str, Any]) -> None:
     parse_config(raw)
+    raw = encrypt_raw_config(raw)
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         "w",
@@ -298,7 +305,38 @@ def config_to_raw(config: AppConfig) -> dict[str, Any]:
         "ui": asdict(config.ui),
         "crewday": asdict(config.crewday),
         "print_schedule": asdict(config.print_schedule),
-        "receipt_template": asdict(config.receipt_template),
+        "receipt_template": {
+            "sections": [
+                asdict(section) for section in config.receipt_template.sections
+            ]
+        },
         "printer": asdict(config.printer),
-        "workers": [asdict(worker) for worker in config.workers],
+        "workers": [
+            {
+                **asdict(worker),
+                "tasks": list(worker.tasks),
+            }
+            for worker in config.workers
+        ],
     }
+
+
+def encrypt_raw_config(raw: dict[str, Any]) -> dict[str, Any]:
+    stored = dict(raw)
+    ui = dict(stored.get("ui") or {})
+    crewday = dict(stored.get("crewday") or {})
+    if ui.get("username") is not None:
+        ui["username"] = _encrypt_config_value(ui["username"])
+    if ui.get("password_hash") is not None:
+        ui["password_hash"] = _encrypt_config_value(ui["password_hash"])
+    if crewday.get("api_token") is not None:
+        crewday["api_token"] = _encrypt_config_value(crewday["api_token"])
+    stored["ui"] = ui
+    stored["crewday"] = crewday
+    return stored
+
+
+def _encrypt_config_value(value: object) -> object:
+    if value is None or is_encrypted_secret(value):
+        return value
+    return encrypt_secret(str(value))

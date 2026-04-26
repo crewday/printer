@@ -185,14 +185,213 @@
             </div>
           </form>
 
+          <form class="panel" method="post" action="/crewday">
+            <div class="panel__head">
+              <div class="panel__head-stack">
+                <span class="panel__eyebrow">Crewday</span>
+                <h2 class="panel__title">Workspace API</h2>
+                <p class="panel__sub">Crewday v1 uses workspace-scoped routes under <code>/w/&lt;slug&gt;/api/v1</code> and bearer API tokens.</p>
+              </div>
+              {% if secret_key_configured %}
+                <span class="chip chip--moss"><span class="dot dot--moss"></span>encrypted</span>
+              {% else %}
+                <span class="chip chip--sand"><span class="dot dot--sand"></span>key missing</span>
+              {% endif %}
+            </div>
+
+            <div class="form">
+              <div class="form__row">
+                <label class="field">
+                  <span class="field__label">Source</span>
+                  <select class="input" name="source" required>
+                    <option value="mock" {% if config.crewday.source == "mock" %}selected{% endif %}>Mock fallback</option>
+                    <option value="crewday_http" {% if config.crewday.source == "crewday_http" %}selected{% endif %}>Crewday HTTP API</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field__label">Base URL</span>
+                  <input class="input input--mono" name="base_url" value="{{ config.crewday.base_url }}" placeholder="http://crewday:8000" required>
+                  <span class="field__hint">Host only, without /w/&lt;slug&gt;/api/v1.</span>
+                </label>
+                <label class="field">
+                  <span class="field__label">Workspace slug</span>
+                  <input class="input input--mono" name="workspace_slug" value="{{ config.crewday.workspace_slug or '' }}" placeholder="myhome">
+                  <span class="field__hint">The slug from Crewday workspace URLs.</span>
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">API token</span>
+                <input class="input input--mono" name="api_token" type="password" autocomplete="new-password" placeholder="{% if config.crewday.api_token %}Stored encrypted; leave blank to keep{% else %}mip_...{% endif %}">
+                <span class="field__hint">Create a workspace token in Crewday with task read access. Stored encrypted when PRINTER_CONFIG_SECRET_KEY is set.</span>
+              </label>
+            </div>
+
+            <div class="btn-group btn-group--end">
+              <button type="submit" class="btn btn--moss">Save Crewday</button>
+            </div>
+          </form>
+
+          <form class="panel" method="post" action="/workers">
+            <div class="panel__head">
+              <div class="panel__head-stack">
+                <span class="panel__eyebrow">Workers</span>
+                <h2 class="panel__title">Task lists</h2>
+                <p class="panel__sub">Configure printable Crewday users. Workers are Crewday <code>users</code> with work roles in the configured workspace.</p>
+              </div>
+            </div>
+
+            <div class="worker-list">
+              {% for worker in config.workers %}
+                {% set row = loop.index0 %}
+                <section class="worker-card">
+                  <label class="check worker-card__enabled">
+                    <input name="worker_enabled" type="checkbox" value="{{ row }}" checked>
+                    <span>Enabled</span>
+                  </label>
+                  <div class="form__row">
+                    <label class="field">
+                      <span class="field__label">Name</span>
+                      <input class="input" name="worker_name" value="{{ worker.name }}" required>
+                    </label>
+                    <label class="field">
+                      <span class="field__label">Timezone</span>
+                      <input class="input input--mono" name="worker_timezone" value="{{ worker.timezone }}" required>
+                    </label>
+                  </div>
+                  <div class="form__row">
+                    <label class="field">
+                      <span class="field__label">Crewday users.id</span>
+                      <input class="input input--mono" name="worker_crewday_user_id" value="{{ worker.crewday_user_id or '' }}" placeholder="user ULID">
+                      <span class="field__hint">Used as assignee_user_id for /tasks.</span>
+                    </label>
+                    <label class="field">
+                      <span class="field__label">Receipt schedule override</span>
+                      <input class="input input--mono" name="worker_schedule" value="{{ worker.schedule }}" placeholder="Optional">
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span class="field__label">Mock tasks</span>
+                    <textarea class="input textarea input--mono" name="worker_tasks" rows="4">{{ worker.tasks | join('\n') }}</textarea>
+                    <span class="field__hint">One task per line, used when crewday.source is mock.</span>
+                  </label>
+                </section>
+              {% endfor %}
+
+              {% set row = config.workers | length %}
+              <section class="worker-card worker-card--new">
+                <label class="check worker-card__enabled">
+                  <input name="worker_enabled" type="checkbox" value="{{ row }}">
+                  <span>Add worker</span>
+                </label>
+                <div class="form__row">
+                  <label class="field">
+                    <span class="field__label">Name</span>
+                    <input class="input" name="worker_name" placeholder="Worker name">
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Timezone</span>
+                    <input class="input input--mono" name="worker_timezone" value="Asia/Dubai">
+                  </label>
+                </div>
+                <div class="form__row">
+                  <label class="field">
+                    <span class="field__label">Crewday users.id</span>
+                    <input class="input input--mono" name="worker_crewday_user_id" placeholder="user ULID">
+                    <span class="field__hint">Used as assignee_user_id for /tasks.</span>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Receipt schedule override</span>
+                    <input class="input input--mono" name="worker_schedule" placeholder="Optional">
+                  </label>
+                </div>
+                <label class="field">
+                  <span class="field__label">Mock tasks</span>
+                  <textarea class="input textarea input--mono" name="worker_tasks" rows="3"></textarea>
+                </label>
+              </section>
+            </div>
+
+            <div class="btn-group btn-group--end">
+              <button type="submit" class="btn btn--moss">Save workers</button>
+            </div>
+          </form>
+
+          <form class="panel" method="post" action="/access">
+            <div class="panel__head">
+              <div class="panel__head-stack">
+                <span class="panel__eyebrow">Access</span>
+                <h2 class="panel__title">Console login</h2>
+                <p class="panel__sub">Local development still uses the Docker Compose <code>admin</code> / <code>admin</code> environment override unless those variables are removed.</p>
+              </div>
+            </div>
+
+            <div class="form">
+              <div class="form__row">
+                <label class="field">
+                  <span class="field__label">Username</span>
+                  <input class="input" name="ui_username" value="{{ config.ui.username }}" required>
+                  <span class="field__hint">Stored encrypted in YAML when a config key is set.</span>
+                </label>
+                <label class="field">
+                  <span class="field__label">New password</span>
+                  <input class="input" name="ui_password" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password">
+                  <span class="field__hint">Saved as a hash, then encrypted in config.</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="btn-group btn-group--end">
+              <button type="submit" class="btn btn--moss">Save login</button>
+            </div>
+          </form>
+
           <section class="panel">
             <div class="panel__head">
               <div class="panel__head-stack">
                 <span class="panel__eyebrow">Calibration</span>
-                <h2 class="panel__title">Density &amp; speed</h2>
-                <p class="panel__sub">Sweep settings against a real roll. Adjustments here run with the configured printer; they don't persist until saved above.</p>
+                <h2 class="panel__title">Density &amp; speed wizard</h2>
+                <p class="panel__sub">Runs the documented sweep as compact strips on the configured printer. Each step cuts only after the strip finishes.</p>
               </div>
             </div>
+
+            <form method="post" action="/calibration/wizard" class="wizard">
+              <div class="form__row">
+                <label class="field">
+                  <span class="field__label">Best density</span>
+                  <input class="input" name="density" type="number" min="0" max="255" value="{{ config.printer.print_density }}">
+                </label>
+                <label class="field">
+                  <span class="field__label">Best speed</span>
+                  <input class="input" name="speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}">
+                </label>
+              </div>
+              <div class="wizard__steps" role="group" aria-label="Calibration wizard steps">
+                <button type="submit" name="phase" value="quick" class="wizard-step">
+                  <span class="wizard-step__num">1</span>
+                  <span class="wizard-step__body">
+                    <strong>Quick sweep</strong>
+                    <small>4/12, 6/9, 8/6, 10/4</small>
+                  </span>
+                </button>
+                <button type="submit" name="phase" value="refine_density" class="wizard-step">
+                  <span class="wizard-step__num">2</span>
+                  <span class="wizard-step__body">
+                    <strong>Refine density</strong>
+                    <small>Uses the speed above</small>
+                  </span>
+                </button>
+                <button type="submit" name="phase" value="refine_speed" class="wizard-step">
+                  <span class="wizard-step__num">3</span>
+                  <span class="wizard-step__body">
+                    <strong>Refine speed</strong>
+                    <small>Uses the density above</small>
+                  </span>
+                </button>
+              </div>
+              <p class="field__hint">After choosing final values, update Density and Speed in Printer connection, then save settings.</p>
+            </form>
+
+            <hr class="panel__divider">
 
             <form method="post" action="/black-test" class="form">
               <div class="form__row">

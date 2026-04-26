@@ -11,6 +11,7 @@ print_schedule:
 receipt_template:
   sections:
   - type: logo
+    value: null
     align: center
     font: a
     width: 1
@@ -20,6 +21,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: text
+    value: '{{ worker_name }}, {{ display_date }}'
     align: center
     font: b
     width: 2
@@ -28,8 +30,8 @@ receipt_template:
     underline: 0
     scale: 1.0
     trailing_blank: true
-    value: '{{ worker_name }}, {{ display_date }}'
   - type: text
+    value: Printed on {{ display_datetime }}
     align: center
     font: b
     width: 1
@@ -38,8 +40,8 @@ receipt_template:
     underline: 0
     scale: 1.0
     trailing_blank: true
-    value: Printed on {{ display_datetime }}
   - type: separator
+    value: null
     align: center
     font: a
     width: 1
@@ -49,6 +51,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: tasks
+    value: null
     align: left
     font: a
     width: 1
@@ -58,6 +61,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: separator
+    value: null
     align: center
     font: a
     width: 1
@@ -67,6 +71,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: false
   - type: logo
+    value: null
     align: center
     font: a
     width: 1

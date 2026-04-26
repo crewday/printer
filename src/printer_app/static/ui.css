@@ -322,6 +322,7 @@ button { font-family: inherit; }
 input[type="text"],
 input[type="number"],
 input[type="email"],
+textarea,
 select {
   width: 100%;
   height: 44px;
@@ -339,12 +340,20 @@ select {
   font-size: 13px;
 }
 .input:hover,
-input:hover { border-color: var(--ink-4); }
+input:hover,
+textarea:hover { border-color: var(--ink-4); }
 .input:focus,
-input:focus {
+input:focus,
+textarea:focus {
   outline: none;
   border-color: var(--moss);
   box-shadow: 0 0 0 3px var(--moss-soft);
+}
+.textarea,
+textarea {
+  min-height: 92px;
+  height: auto;
+  resize: vertical;
 }
 
 select.input,
@@ -471,6 +480,87 @@ select {
 
 @media (max-width: 520px) {
   .check-grid { grid-template-columns: 1fr; }
+}
+
+/* Workers */
+.worker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.worker-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-2);
+}
+.worker-card--new {
+  border-style: dashed;
+  background: transparent;
+}
+.worker-card__enabled {
+  align-self: flex-start;
+  padding: 0;
+}
+
+/* Calibration wizard */
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.wizard__steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.wizard-step {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-2);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.wizard-step:hover {
+  border-color: var(--moss);
+  background: var(--moss-soft);
+}
+.wizard-step__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  color: var(--moss);
+  font-weight: 700;
+}
+.wizard-step__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.wizard-step__body strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.wizard-step__body small {
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 /* Buttons */

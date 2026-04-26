@@ -18,9 +18,8 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from printer_app import escpos
-from printer_app.auth import configured_password_hash, verify_password
+from printer_app.auth import configured_password_hash, hash_password, verify_password
 from printer_app.config import (
-    DEFAULT_RECEIPT_TEMPLATE,
     config_path_from_env,
     config_to_raw,
     default_receipt_template,
@@ -33,10 +32,12 @@ from printer_app.models import AppConfig, PrinterProfile, ReceiptTemplateConfig
 from printer_app.profiles import get_profile, load_profiles
 from printer_app.renderer import (
     render_black_test,
+    render_calibration_sweep,
     render_font_test,
     render_receipt,
     render_receipt_preview,
 )
+from printer_app.secrets import secret_key_configured
 from printer_app.task_source import build_task_source
 from printer_app.transport import send_to_network_printer
 
@@ -137,6 +138,7 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
             "results": list(reversed(RECENT_RESULTS[-8:])),
             "template_data": _template_to_payload(config.receipt_template),
             "default_template_data": _template_to_payload(default_receipt_template()),
+            "secret_key_configured": secret_key_configured(),
         },
     )
 
@@ -182,6 +184,117 @@ def save_settings(
     }
     write_raw_config(config_path_from_env(), raw)
     _record("Saved printer settings.")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/crewday")
+def save_crewday(
+    _: Annotated[None, Depends(require_auth)],
+    source: Annotated[str, Form()],
+    base_url: Annotated[str, Form()],
+    workspace_slug: Annotated[str, Form()] = "",
+    api_token: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    raw["crewday"] = {
+        **(raw.get("crewday") or {}),
+        "source": source,
+        "base_url": base_url.strip().rstrip("/") or "http://crewday:8000",
+        "workspace_slug": workspace_slug.strip() or None,
+        "workspace_id": None,
+    }
+    if api_token.strip():
+        raw["crewday"]["api_token"] = api_token.strip()
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Crewday settings were not saved: {exc}")
+    else:
+        _record("Saved Crewday connection settings.")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/access")
+def save_access(
+    _: Annotated[None, Depends(require_auth)],
+    ui_username: Annotated[str, Form()],
+    ui_password: Annotated[str, Form()] = "",
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    raw["ui"] = {
+        **(raw.get("ui") or {}),
+        "username": ui_username.strip() or "admin",
+    }
+    if ui_password:
+        raw["ui"]["password_hash"] = hash_password(ui_password)
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Access settings were not saved: {exc}")
+    else:
+        _record("Saved UI access settings.")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/workers")
+async def save_workers(
+    request: Request,
+    _: Annotated[None, Depends(require_auth)],
+) -> RedirectResponse:
+    form = await request.form()
+    worker_name = [str(value) for value in form.getlist("worker_name")]
+    worker_timezone = [str(value) for value in form.getlist("worker_timezone")]
+    worker_schedule = [str(value) for value in form.getlist("worker_schedule")]
+    worker_crewday_user_id = [
+        str(value) for value in form.getlist("worker_crewday_user_id")
+    ]
+    worker_tasks = [str(value) for value in form.getlist("worker_tasks")]
+    raw_workers: list[dict[str, object]] = []
+    enabled = {
+        int(value)
+        for value in (str(item) for item in form.getlist("worker_enabled"))
+        if value.strip().lstrip("-").isdigit()
+    }
+    row_count = min(
+        len(worker_name),
+        len(worker_timezone),
+        len(worker_schedule),
+        len(worker_crewday_user_id),
+        len(worker_tasks),
+    )
+    for index in range(row_count):
+        name = worker_name[index].strip()
+        if index not in enabled or not name:
+            continue
+        raw_workers.append(
+            {
+                "name": name,
+                "schedule": worker_schedule[index].strip(),
+                "crewday_user_id": worker_crewday_user_id[index].strip() or None,
+                "timezone": worker_timezone[index].strip() or "Asia/Dubai",
+                "tasks": [
+                    line.strip()
+                    for line in worker_tasks[index].splitlines()
+                    if line.strip()
+                ],
+            }
+        )
+
+    if not raw_workers:
+        _record("Worker settings were not saved: at least one worker is required.")
+        return RedirectResponse("/", status_code=303)
+
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    raw["workers"] = raw_workers
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Worker settings were not saved: {exc}")
+    else:
+        _record(f"Saved {len(raw_workers)} worker configuration row(s).")
     return RedirectResponse("/", status_code=303)
 
 
@@ -302,6 +415,36 @@ def font_test(_: Annotated[None, Depends(require_auth)]) -> RedirectResponse:
             f"Printed font test to {config.printer.host}:{config.printer.port} "
             f"with {config.printer.code_page}."
         )
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/calibration/wizard")
+def calibration_wizard(
+    _: Annotated[None, Depends(require_auth)],
+    phase: Annotated[str, Form()],
+    density: Annotated[int, Form()],
+    speed: Annotated[int, Form()],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    try:
+        settings = _calibration_settings(phase, density, speed)
+    except ValueError as exc:
+        _record(f"Calibration wizard failed: {exc}")
+        return RedirectResponse("/", status_code=303)
+
+    printer = replace(config.printer, cut=True)
+    payload = render_calibration_sweep(
+        printer,
+        tuple(settings),
+        title=_calibration_title(phase),
+    )
+    try:
+        send_to_network_printer(payload, printer)
+    except Exception as exc:
+        _record(f"Calibration wizard failed: {exc}")
+    else:
+        combos = ", ".join(f"d={d}/s={s}" for d, s in settings)
+        _record(f"Printed compact calibration strip ({combos}); cut at end.")
     return RedirectResponse("/", status_code=303)
 
 
@@ -472,3 +615,37 @@ def _profile_data(profile: PrinterProfile) -> dict[str, object]:
         "print_speed": profile.print_speed,
         "cut": profile.cut,
     }
+
+
+def _calibration_settings(
+    phase: str,
+    density: int,
+    speed: int,
+) -> list[tuple[int, int]]:
+    if phase == "quick":
+        return [(4, 12), (6, 9), (8, 6), (10, 4)]
+    if phase == "refine_density":
+        return [(value, speed) for value in _window(density, 2, 0, 255)]
+    if phase == "refine_speed":
+        return [(density, value) for value in _window(speed, 2, 0, 17)]
+    raise ValueError(f"unknown calibration phase: {phase}")
+
+
+def _window(center: int, step: int, minimum: int, maximum: int) -> list[int]:
+    values = [
+        center - step * 2,
+        center - step,
+        center,
+        center + step,
+        center + step * 2,
+    ]
+    return sorted({min(max(value, minimum), maximum) for value in values})
+
+
+def _calibration_title(phase: str) -> str:
+    titles = {
+        "quick": "Calibration quick sweep",
+        "refine_density": "Calibration density refine",
+        "refine_speed": "Calibration speed refine",
+    }
+    return titles.get(phase, "Calibration sweep")

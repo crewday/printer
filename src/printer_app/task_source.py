@@ -76,8 +76,11 @@ class CrewdayHttpTaskSource:
             "scheduled_for_utc_lt": end.isoformat(),
             "limit": "100",
         }
+        task_path = "/api/v1/tasks"
+        if self._config.crewday.workspace_slug:
+            task_path = f"/w/{self._config.crewday.workspace_slug}/api/v1/tasks"
         with httpx.Client(base_url=self._config.crewday.base_url, timeout=10) as client:
-            response = client.get("/api/v1/tasks", params=params, headers=headers)
+            response = client.get(task_path, params=params, headers=headers)
             response.raise_for_status()
             payload = response.json()
         rows = payload.get("data", payload if isinstance(payload, list) else [])
