@@ -1,10 +1,11 @@
 ui:
-  username: admin
+  username: enc:v1:gAAAAABp7ggcm-jbU9RTXLfEhK9xBfmmHMmV-QZpg0Vg-dLTKaR9JpLT6W-YeLfwbvuFFGDQg8oyEhklJMp38E3Ajv15UZf28g==
   password_hash: null
 crewday:
   source: mock
   base_url: http://crewday:8000
   api_token: null
+  workspace_slug: null
   workspace_id: null
 print_schedule:
   cron: ''
@@ -12,7 +13,6 @@ timezone: Asia/Dubai
 receipt_template:
   sections:
   - type: logo
-    value: null
     align: center
     font: a
     width: 1
@@ -22,7 +22,6 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: text
-    value: '{{ worker_name }}, {{ display_date }}'
     align: center
     font: b
     width: 2
@@ -31,8 +30,8 @@ receipt_template:
     underline: 0
     scale: 1.0
     trailing_blank: true
+    value: '{{ worker_name }}, {{ display_date }}'
   - type: text
-    value: Printed on {{ display_datetime }}
     align: center
     font: b
     width: 1
@@ -41,8 +40,8 @@ receipt_template:
     underline: 0
     scale: 1.0
     trailing_blank: true
+    value: Printed on {{ display_datetime }}
   - type: separator
-    value: null
     align: center
     font: a
     width: 1
@@ -52,7 +51,6 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: tasks
-    value: null
     align: left
     font: a
     width: 1
@@ -62,7 +60,6 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: separator
-    value: null
     align: center
     font: a
     width: 1
@@ -72,7 +69,6 @@ receipt_template:
     scale: 1.0
     trailing_blank: false
   - type: logo
-    value: null
     align: center
     font: a
     width: 1
