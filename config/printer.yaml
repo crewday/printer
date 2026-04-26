@@ -8,6 +8,7 @@ crewday:
   workspace_id: null
 print_schedule:
   cron: ''
+timezone: Asia/Dubai
 receipt_template:
   sections:
   - type: logo
@@ -98,8 +99,4 @@ workers:
 - name: Vincent
   schedule: ''
   crewday_user_id: null
-  timezone: Asia/Dubai
-  tasks:
-  - Review overnight crewday updates
-  - Print the next task batch
-  - Confirm thermal printer output is readable
+  enabled: true

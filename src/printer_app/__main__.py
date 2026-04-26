@@ -17,7 +17,7 @@ from printer_app.transport import send_to_network_printer
 def print_test(config_path: Path, dry_run: bool, worker_name: str | None) -> int:
     config = load_config(config_path)
     worker = select_worker(config.workers, worker_name)
-    now = datetime.now(ZoneInfo(worker.timezone))
+    now = datetime.now(ZoneInfo(config.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
     payload = render_receipt(batch, config.printer, now, config.receipt_template)
 
@@ -37,7 +37,7 @@ def print_test(config_path: Path, dry_run: bool, worker_name: str | None) -> int
 def preview(config_path: Path, worker_name: str | None) -> int:
     config = load_config(config_path)
     worker = select_worker(config.workers, worker_name)
-    now = datetime.now(ZoneInfo(worker.timezone))
+    now = datetime.now(ZoneInfo(config.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
     print(
         receipt_text_preview(
@@ -97,7 +97,10 @@ def select_worker(
     worker_name: str | None,
 ) -> WorkerConfig:
     if worker_name is None:
-        return workers[0]
+        for worker in workers:
+            if worker.enabled:
+                return worker
+        raise ValueError("no workers are enabled in config")
 
     for worker in workers:
         if worker.name == worker_name:

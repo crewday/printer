@@ -14,7 +14,7 @@ services:
       PRINTER_UI_PASSWORD: admin
       PRINTER_CONFIG_SECRET_KEY: local-dev-printer-config-secret-key
       # Process-local timezone for container code that asks the OS for local time.
-      # Receipt task times come from workers[].timezone in /config/printer.yaml.
+      # Receipt task times come from timezone in /config/printer.yaml.
       TZ: ${TZ:-Asia/Dubai}
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
@@ -36,7 +36,7 @@ services:
       PRINTER_UI_PASSWORD: admin
       PRINTER_CONFIG_SECRET_KEY: local-dev-printer-config-secret-key
       # Process-local timezone for container code that asks the OS for local time.
-      # Receipt task times come from workers[].timezone in /config/printer.yaml.
+      # Receipt task times come from timezone in /config/printer.yaml.
       TZ: ${TZ:-Asia/Dubai}
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}

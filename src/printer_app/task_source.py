@@ -5,7 +5,19 @@ from typing import Any, Protocol
 
 import httpx
 
-from printer_app.models import AppConfig, ReceiptTask, TaskBatch, WorkerConfig
+from printer_app.models import (
+    AppConfig,
+    CrewdayWorker,
+    ReceiptTask,
+    TaskBatch,
+    WorkerConfig,
+)
+
+MOCK_TASK_TITLES = (
+    "Review today's Crewday assignments",
+    "Confirm task details before starting",
+    "Report blockers in Crewday",
+)
 
 
 class TaskSource(Protocol):
@@ -45,7 +57,7 @@ class MockTaskSource:
                 if index == 1
                 else (),
             )
-            for index, title in enumerate(worker.tasks, start=1)
+            for index, title in enumerate(MOCK_TASK_TITLES, start=1)
         )
         return TaskBatch(
             worker_name=worker.name,
@@ -83,13 +95,46 @@ class CrewdayHttpTaskSource:
             response = client.get(task_path, params=params, headers=headers)
             response.raise_for_status()
             payload = response.json()
-        rows = payload.get("data", payload if isinstance(payload, list) else [])
+        rows = _rows(payload)
         return TaskBatch(
             worker_name=worker.name,
             source_label="Crewday",
             generated_at=now,
             tasks=tuple(_task_from_crewday(row) for row in rows),
         )
+
+    def fetch_workers(self) -> tuple[CrewdayWorker, ...]:
+        headers = {}
+        if self._config.crewday.api_token:
+            headers["Authorization"] = f"Bearer {self._config.crewday.api_token}"
+
+        with httpx.Client(base_url=self._config.crewday.base_url, timeout=10) as client:
+            for path in self._worker_paths():
+                response = client.get(path, headers=headers)
+                if response.status_code == 404:
+                    continue
+                response.raise_for_status()
+                return tuple(
+                    _worker_from_crewday(row) for row in _rows(response.json())
+                )
+        return ()
+
+    def _worker_paths(self) -> tuple[str, ...]:
+        prefix = ""
+        if self._config.crewday.workspace_slug:
+            prefix = f"/w/{self._config.crewday.workspace_slug}/api/v1"
+        else:
+            prefix = "/api/v1"
+        return (f"{prefix}/employees", f"{prefix}/users")
+
+
+def fetch_crewday_workers(config: AppConfig) -> tuple[CrewdayWorker, ...]:
+    if config.crewday.source == "crewday_http":
+        return CrewdayHttpTaskSource(config).fetch_workers()
+    return tuple(
+        CrewdayWorker(user_id=worker.crewday_user_id or worker.name, name=worker.name)
+        for worker in config.workers
+    )
 
 
 def _task_from_crewday(row: dict[str, Any]) -> ReceiptTask:
@@ -115,3 +160,22 @@ def _task_from_crewday(row: dict[str, Any]) -> ReceiptTask:
         photo_required=(row.get("photo_evidence") == "required"),
         checklist=checklist,
     )
+
+
+def _rows(payload: object) -> list[dict[str, Any]]:
+    rows = payload.get("data", []) if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _worker_from_crewday(row: dict[str, Any]) -> CrewdayWorker:
+    user_id = row.get("user_id") or row.get("id") or row.get("users_id")
+    name = (
+        row.get("name")
+        or row.get("display_name")
+        or row.get("full_name")
+        or row.get("email")
+        or "Unnamed worker"
+    )
+    return CrewdayWorker(user_id=str(user_id or ""), name=str(name))

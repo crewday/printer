@@ -22,13 +22,15 @@ def test_ensure_config_creates_yaml(tmp_path: Path) -> None:
     assert config.crewday.source == "mock"
     assert config.crewday.workspace_slug is None
     assert config.print_schedule.cron == ""
+    assert config.timezone == "Asia/Dubai"
     assert config.receipt_template.sections[0].type == "logo"
     assert config.receipt_template.sections[4].type == "tasks"
     assert config.workers[0].name == "Vincent"
     assert config.workers[0].schedule == ""
+    assert config.workers[0].enabled is True
 
 
-def test_load_config_reads_worker_timezone(tmp_path: Path) -> None:
+def test_load_config_reads_instance_timezone_and_worker_enabled(tmp_path: Path) -> None:
     path = tmp_path / "printer.yaml"
     path.write_text(
         """
@@ -37,6 +39,7 @@ ui:
   password_hash: null
 crewday:
   source: mock
+timezone: Europe/Paris
 printer:
   type: network_escpos
   profile: epson_tm_t20ii
@@ -54,17 +57,17 @@ printer:
 workers:
   - name: Amina
     schedule: "0 7 * * *"
-    timezone: Europe/Paris
-    tasks:
-      - Check arrivals
+    crewday_user_id: 01HXUSER
+    enabled: false
 """,
         encoding="utf-8",
     )
 
     config = load_config(path)
 
-    assert config.workers[0].timezone == "Europe/Paris"
-    assert config.workers[0].tasks == ("Check arrivals",)
+    assert config.timezone == "Europe/Paris"
+    assert config.workers[0].enabled is False
+    assert config.workers[0].crewday_user_id == "01HXUSER"
 
 
 def test_load_config_reads_print_schedule(tmp_path: Path) -> None:

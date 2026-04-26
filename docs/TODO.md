@@ -63,7 +63,7 @@ This is the working build list derived from `AGENTS.md`, `docs/SPEC.md`,
 ### Data Source
 
 - [x] Define `TaskSource.fetch_task_batch(worker, now)`.
-- [x] Implement `MockTaskSource` from YAML worker task entries.
+- [x] Implement `MockTaskSource` with fixed sample task entries.
 - [x] Implement `CrewdayHttpTaskSource` as a not-yet-default integration path.
 - [x] Normalize Crewday and mock tasks into common task items:
   - title

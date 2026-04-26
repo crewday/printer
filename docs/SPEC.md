@@ -6,7 +6,7 @@ Build a Docker-hosted Python 3.14 service that periodically prints task lists fo
 
 ## Initial Scope
 
-1. Load printer and worker settings from a bind-mounted config file.
+1. Load printer and Crewday roster selection from a bind-mounted config file.
 2. Render a readable, attractive ESC/POS receipt containing:
    - simple Crewday logo/header
    - worker name
@@ -20,7 +20,6 @@ Build a Docker-hosted Python 3.14 service that periodically prints task lists fo
 
 ## Later Scope
 
-- Read real worker tasks from `../crewday`.
 - Support cron-like schedules per worker or worker group.
 - Run as a long-lived scheduler process with code/config reload in development.
 - Add printer profiles for model-specific paper width, cut behavior, code pages, and image/logo support.
@@ -48,12 +47,13 @@ printer:
   print_speed: 6
   cut: true
 
+timezone: Asia/Dubai
+
 workers:
   - name: Vincent
+    crewday_user_id: 01HX...
+    enabled: true
     schedule: "0 8 * * *"
-    tasks:
-      - "Review overnight crewday updates"
-      - "Print the next task batch"
 ```
 
 ## First Run Behavior
@@ -64,7 +64,7 @@ workers:
   - Epson TM-T20II profile
   - host from `PRINTER_HOST` env var when present, otherwise a placeholder
   - UI username/password from env vars when present
-- If no UI password is configured, the application must fail closed or generate a clear setup-only state. It must not expose an unauthenticated settings UI.
+- If no UI password is configured, the local setup UI is unprotected. Set `PRINTER_UI_PASSWORD` or save a YAML password before exposing the container beyond a trusted local network.
 - The config path must be configurable, defaulting to `/config/printer.yaml`.
 
 ## Docker Requirements

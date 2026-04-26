@@ -158,16 +158,23 @@
               </div>
 
               <h3 class="section-title">Automatic print</h3>
-              <label class="field">
-                <span class="field__label">Cron schedule</span>
-                <input
-                  class="input input--mono"
-                  id="print-schedule-cron"
-                  name="print_schedule_cron"
-                  value="{{ config.print_schedule.cron }}"
-                  placeholder="Leave empty to disable">
-                <span class="field__hint">Five-field cron. Empty means no automatic print.</span>
-              </label>
+              <div class="form__row">
+                <label class="field">
+                  <span class="field__label">Cron schedule</span>
+                  <input
+                    class="input input--mono"
+                    id="print-schedule-cron"
+                    name="print_schedule_cron"
+                    value="{{ config.print_schedule.cron }}"
+                    placeholder="Leave empty to disable">
+                  <span class="field__hint">Five-field cron. Empty means no automatic print.</span>
+                </label>
+                <label class="field">
+                  <span class="field__label">Printer timezone</span>
+                  <input class="input input--mono" name="timezone" value="{{ config.timezone }}" required>
+                  <span class="field__hint">Used for all print windows and timestamps.</span>
+                </label>
+              </div>
               <details class="helper">
                 <summary>Examples</summary>
                 <div class="example-grid" aria-label="Cron examples">
@@ -235,80 +242,35 @@
             <div class="panel__head">
               <div class="panel__head-stack">
                 <span class="panel__eyebrow">Workers</span>
-                <h2 class="panel__title">Task lists</h2>
-                <p class="panel__sub">Configure printable Crewday users. Workers are Crewday <code>users</code> with work roles in the configured workspace.</p>
+                <h2 class="panel__title">Print roster</h2>
+                <p class="panel__sub">Enable Crewday workers for this printer.</p>
               </div>
             </div>
 
+            {% if crewday_worker_error %}
+              <p class="field__hint">Crewday roster could not be loaded: {{ crewday_worker_error }}. Showing saved config rows.</p>
+            {% endif %}
             <div class="worker-list">
-              {% for worker in config.workers %}
+              {% for worker in crewday_workers %}
                 {% set row = loop.index0 %}
                 <section class="worker-card">
                   <label class="check worker-card__enabled">
-                    <input name="worker_enabled" type="checkbox" value="{{ row }}" checked>
+                    <input name="worker_enabled" type="checkbox" value="{{ row }}" {% if worker.enabled %}checked{% endif %}>
                     <span>Enabled</span>
                   </label>
                   <div class="form__row">
                     <label class="field">
                       <span class="field__label">Name</span>
-                      <input class="input" name="worker_name" value="{{ worker.name }}" required>
-                    </label>
-                    <label class="field">
-                      <span class="field__label">Timezone</span>
-                      <input class="input input--mono" name="worker_timezone" value="{{ worker.timezone }}" required>
-                    </label>
-                  </div>
-                  <div class="form__row">
-                    <label class="field">
-                      <span class="field__label">Crewday users.id</span>
-                      <input class="input input--mono" name="worker_crewday_user_id" value="{{ worker.crewday_user_id or '' }}" placeholder="user ULID">
-                      <span class="field__hint">Used as assignee_user_id for /tasks.</span>
+                      <input class="input" name="worker_name" value="{{ worker.name }}" readonly>
                     </label>
                     <label class="field">
                       <span class="field__label">Receipt schedule override</span>
                       <input class="input input--mono" name="worker_schedule" value="{{ worker.schedule }}" placeholder="Optional">
                     </label>
                   </div>
-                  <label class="field">
-                    <span class="field__label">Mock tasks</span>
-                    <textarea class="input textarea input--mono" name="worker_tasks" rows="4">{{ worker.tasks | join('\n') }}</textarea>
-                    <span class="field__hint">One task per line, used when crewday.source is mock.</span>
-                  </label>
+                  <input type="hidden" name="worker_crewday_user_id" value="{{ worker.user_id }}">
                 </section>
               {% endfor %}
-
-              {% set row = config.workers | length %}
-              <section class="worker-card worker-card--new">
-                <label class="check worker-card__enabled">
-                  <input name="worker_enabled" type="checkbox" value="{{ row }}">
-                  <span>Add worker</span>
-                </label>
-                <div class="form__row">
-                  <label class="field">
-                    <span class="field__label">Name</span>
-                    <input class="input" name="worker_name" placeholder="Worker name">
-                  </label>
-                  <label class="field">
-                    <span class="field__label">Timezone</span>
-                    <input class="input input--mono" name="worker_timezone" value="Asia/Dubai">
-                  </label>
-                </div>
-                <div class="form__row">
-                  <label class="field">
-                    <span class="field__label">Crewday users.id</span>
-                    <input class="input input--mono" name="worker_crewday_user_id" placeholder="user ULID">
-                    <span class="field__hint">Used as assignee_user_id for /tasks.</span>
-                  </label>
-                  <label class="field">
-                    <span class="field__label">Receipt schedule override</span>
-                    <input class="input input--mono" name="worker_schedule" placeholder="Optional">
-                  </label>
-                </div>
-                <label class="field">
-                  <span class="field__label">Mock tasks</span>
-                  <textarea class="input textarea input--mono" name="worker_tasks" rows="3"></textarea>
-                </label>
-              </section>
             </div>
 
             <div class="btn-group btn-group--end">
@@ -321,7 +283,7 @@
               <div class="panel__head-stack">
                 <span class="panel__eyebrow">Access</span>
                 <h2 class="panel__title">Console login</h2>
-                <p class="panel__sub">Local development still uses the Docker Compose <code>admin</code> / <code>admin</code> environment override unless those variables are removed.</p>
+                <p class="panel__sub">Env variables <code>PRINTER_UI_USERNAME</code> and <code>PRINTER_UI_PASSWORD</code> take priority over this config.</p>
               </div>
             </div>
 
@@ -435,7 +397,7 @@
                 <h2 class="panel__title">First worker receipt</h2>
                 <p class="panel__sub">
                   Prints the rendered task list for
-                  <strong>{{ config.workers[0].name }}</strong>
+                  <strong>{{ preview_worker.name }}</strong>
                   to the configured printer.
                 </p>
               </div>
@@ -453,7 +415,7 @@
             <div class="panel__head">
               <div class="panel__head-stack">
                 <span class="panel__eyebrow">Preview</span>
-                <h2 class="panel__title">{{ config.workers[0].name }}'s receipt</h2>
+                <h2 class="panel__title">{{ preview_worker.name }}'s receipt</h2>
                 <p class="panel__sub">Rendered from the dry-run ESC/POS bytes at {{ config.printer.paper_columns }} columns. No paper consumed.</p>
               </div>
               <span class="chip chip--sand"><span class="dot dot--sand"></span>dry run</span>
@@ -470,7 +432,7 @@
                   src="{{ preview.src }}"
                   width="{{ preview.width_dots }}"
                   height="{{ preview.height_dots }}"
-                  alt="{{ config.workers[0].name }} receipt preview">
+                  alt="{{ preview_worker.name }} receipt preview">
               </div>
             </div>
 

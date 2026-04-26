@@ -5,6 +5,7 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
 
@@ -75,6 +76,7 @@ def default_config() -> dict[str, Any]:
         "print_schedule": {
             "cron": "",
         },
+        "timezone": os.environ.get("PRINTER_TIMEZONE", "Asia/Dubai"),
         "receipt_template": DEFAULT_RECEIPT_TEMPLATE,
         "printer": {
             "type": "network_escpos",
@@ -96,12 +98,7 @@ def default_config() -> dict[str, Any]:
                 "name": "Vincent",
                 "schedule": "",
                 "crewday_user_id": None,
-                "timezone": "Asia/Dubai",
-                "tasks": [
-                    "Review overnight crewday updates",
-                    "Print the next task batch",
-                    "Confirm thermal printer output is readable",
-                ],
+                "enabled": True,
             }
         ],
     }
@@ -129,6 +126,9 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     receipt_template_raw = raw.get("receipt_template") or DEFAULT_RECEIPT_TEMPLATE
     printer_raw = raw.get("printer") or {}
     workers_raw = raw.get("workers") or []
+    timezone = str(
+        raw.get("timezone") or os.environ.get("PRINTER_TIMEZONE") or "Asia/Dubai"
+    )
 
     if not workers_raw:
         raise ValueError("config must include at least one worker")
@@ -153,6 +153,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         cron=str(print_schedule_raw.get("cron", "")).strip(),
     )
     validate_cron_or_empty(print_schedule.cron)
+    validate_timezone(timezone)
     profile_id = str(printer_raw.get("profile", default_profile().id))
     profile = get_profile(profile_id) or default_profile()
     printer = PrinterConfig(
@@ -185,8 +186,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
             name=str(worker["name"]),
             schedule=str(worker.get("schedule", "")),
             crewday_user_id=worker.get("crewday_user_id"),
-            timezone=str(worker.get("timezone", "Asia/Dubai")),
-            tasks=tuple(str(task) for task in worker.get("tasks", [])),
+            enabled=bool(worker.get("enabled", True)),
         )
         for worker in workers_raw
     )
@@ -195,6 +195,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         crewday=crewday,
         print_schedule=print_schedule,
         receipt_template=receipt_template,
+        timezone=timezone,
         printer=printer,
         workers=workers,
     )
@@ -280,6 +281,13 @@ def validate_printer_config(printer: PrinterConfig) -> None:
         raise ValueError("printer.print_speed must be between 0 and 17")
 
 
+def validate_timezone(timezone: str) -> None:
+    try:
+        ZoneInfo(timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(f"unsupported timezone: {timezone}") from exc
+
+
 def write_config(path: Path, config: AppConfig) -> None:
     write_raw_config(path, config_to_raw(config))
 
@@ -305,19 +313,14 @@ def config_to_raw(config: AppConfig) -> dict[str, Any]:
         "ui": asdict(config.ui),
         "crewday": asdict(config.crewday),
         "print_schedule": asdict(config.print_schedule),
+        "timezone": config.timezone,
         "receipt_template": {
             "sections": [
                 asdict(section) for section in config.receipt_template.sections
             ]
         },
         "printer": asdict(config.printer),
-        "workers": [
-            {
-                **asdict(worker),
-                "tasks": list(worker.tasks),
-            }
-            for worker in config.workers
-        ],
+        "workers": [asdict(worker) for worker in config.workers],
     }
 
 

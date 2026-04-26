@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -19,6 +20,7 @@ crewday:
   source: mock
 print_schedule:
   cron: ""
+timezone: Asia/Dubai
 printer:
   type: network_escpos
   profile: epson_tm_t20ii
@@ -35,13 +37,11 @@ printer:
   cut: false
 workers:
   - name: Vincent
-    timezone: Asia/Dubai
-    tasks:
-      - Prepare Villa Sud
+    crewday_user_id: user-1
+    enabled: true
   - name: Amina
-    timezone: Europe/Paris
-    tasks:
-      - Check arrivals
+    crewday_user_id: user-2
+    enabled: true
 """,
         encoding="utf-8",
     )
@@ -77,6 +77,39 @@ def test_api_prints_all_workers_by_default_with_cuts(
     assert sent_payloads[0].count(b"\x1dVA\x03") == 2
     assert b"Vincent" in sent_payloads[0]
     assert b"Amina" in sent_payloads[0]
+
+
+def test_ui_is_unprotected_when_no_password_is_configured(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.delenv("PRINTER_UI_USERNAME", raising=False)
+    monkeypatch.delenv("PRINTER_UI_PASSWORD", raising=False)
+
+    client = TestClient(web.app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+
+
+def test_ui_requires_credentials_when_password_is_configured(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.get("/")
+
+    assert response.status_code == 401
 
 
 def test_api_prints_requested_workers_from_json(
@@ -125,6 +158,47 @@ def test_api_print_rejects_unknown_worker(tmp_path: Path, monkeypatch) -> None:
 
     assert response.status_code == 404
     assert "Missing" in response.json()["detail"]
+
+
+def test_api_print_rejects_disabled_worker(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    stored = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    stored["workers"][1]["enabled"] = False
+    config_path.write_text(yaml.safe_dump(stored), encoding="utf-8")
+
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/api/receipts/print",
+        json={"workers": ["Amina"]},
+        auth=("admin", "admin"),
+    )
+
+    assert response.status_code == 404
+    assert "disabled" in response.json()["detail"]
+
+
+def test_worker_schedule_overrides_global_schedule(tmp_path: Path) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    stored = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    stored["print_schedule"]["cron"] = "0 8 * * *"
+    stored["workers"][1]["schedule"] = "30 9 * * *"
+    config_path.write_text(yaml.safe_dump(stored), encoding="utf-8")
+
+    from printer_app.config import load_config
+
+    config = load_config(config_path)
+
+    assert web._scheduled_worker_names(config, datetime(2026, 4, 26, 8, 0)) == [
+        "Vincent"
+    ]
+    assert web._scheduled_worker_names(config, datetime(2026, 4, 26, 9, 30)) == [
+        "Amina"
+    ]
 
 
 def test_template_default_returns_bundled_sections(
@@ -241,12 +315,10 @@ def test_save_workers_round_trips_to_yaml(tmp_path: Path, monkeypatch) -> None:
 
     client = TestClient(web.app)
     form = {
-        "worker_enabled": ["0", "2"],
+        "worker_enabled": ["0"],
         "worker_name": ["Vincent", "Amina", "Nora"],
-        "worker_timezone": ["Asia/Dubai", "Europe/Paris", "Europe/Paris"],
         "worker_schedule": ["0 8 * * *", "", ""],
-        "worker_crewday_user_id": ["user-1", "", ""],
-        "worker_tasks": ["Open house\nCheck stock", "Skipped", "Prep cart"],
+        "worker_crewday_user_id": ["user-1", "user-2", "user-3"],
     }
     response = client.post(
         "/workers",
@@ -261,12 +333,16 @@ def test_save_workers_round_trips_to_yaml(tmp_path: Path, monkeypatch) -> None:
     from printer_app.config import load_config
 
     reloaded = load_config(config_path)
-    assert [worker.name for worker in reloaded.workers] == ["Vincent", "Nora"]
+    assert [worker.name for worker in reloaded.workers] == [
+        "Vincent",
+        "Amina",
+        "Nora",
+    ]
     assert reloaded.workers[0].schedule == "0 8 * * *"
     assert reloaded.workers[0].crewday_user_id == "user-1"
-    assert reloaded.workers[0].tasks == ("Open house", "Check stock")
-    assert reloaded.workers[1].timezone == "Europe/Paris"
-    assert reloaded.workers[1].tasks == ("Prep cart",)
+    assert reloaded.workers[0].enabled is True
+    assert reloaded.workers[1].enabled is False
+    assert reloaded.workers[2].enabled is False
 
 
 def test_save_crewday_persists_workspace_slug_and_encrypted_token(

@@ -2,7 +2,7 @@
 
 ![Printer console UI](docs/assets/printer-console.png)
 
-Docker-hosted Python service for printing configured worker task lists from `../crewday` to a thermal receipt printer.
+Docker-hosted Python service for printing enabled Crewday workers' task lists to a thermal receipt printer.
 
 The first slice is a containerized ESC/POS probe that can dry-run render a sample receipt or send it to a network printer.
 
@@ -75,7 +75,9 @@ PRINTER_UI_PASSWORD=change-me docker compose up dev
 
 Then open <http://127.0.0.1:8087>.
 
-Print all configured workers through the REST API:
+If neither `PRINTER_UI_PASSWORD` nor a YAML password hash is configured, the UI is unprotected.
+
+Print all enabled workers through the REST API:
 
 ```sh
 curl -u admin:admin -X POST http://127.0.0.1:8087/api/receipts/print

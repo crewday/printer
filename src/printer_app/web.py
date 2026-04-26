@@ -28,7 +28,13 @@ from printer_app.config import (
     write_raw_config,
 )
 from printer_app.cron import cron_matches
-from printer_app.models import AppConfig, PrinterProfile, ReceiptTemplateConfig
+from printer_app.models import (
+    AppConfig,
+    CrewdayWorker,
+    PrinterProfile,
+    ReceiptTemplateConfig,
+    TaskBatch,
+)
 from printer_app.profiles import get_profile, load_profiles
 from printer_app.renderer import (
     render_black_test,
@@ -38,7 +44,7 @@ from printer_app.renderer import (
     render_receipt_preview,
 )
 from printer_app.secrets import secret_key_configured
-from printer_app.task_source import build_task_source
+from printer_app.task_source import build_task_source, fetch_crewday_workers
 from printer_app.transport import send_to_network_printer
 
 RECENT_RESULTS: list[str] = []
@@ -77,7 +83,7 @@ app.mount(
     name="static",
 )
 templates = Jinja2Templates(directory=Path(__file__).with_name("templates"))
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
 
 class PrintReceiptsRequest(BaseModel):
@@ -102,14 +108,17 @@ class TemplatePayload(BaseModel):
 
 
 def require_auth(
-    credentials: Annotated[HTTPBasicCredentials, Depends(security)],
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(security)],
 ) -> None:
     config = load_config(config_path_from_env())
     password_hash = configured_password_hash(config.ui.password_hash)
     if not password_hash:
+        return
+    if credentials is None:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="UI password is not configured. Set PRINTER_UI_PASSWORD.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="credentials required",
+            headers={"WWW-Authenticate": "Basic"},
         )
     valid_user = credentials.username == config.ui.username
     valid_password = verify_password(credentials.password, password_hash)
@@ -125,6 +134,7 @@ def require_auth(
 def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLResponse:
     config = load_config(config_path_from_env())
     preview = _preview_for_first_worker(config, config.receipt_template)
+    crewday_workers, crewday_error = _load_worker_roster(config)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -135,6 +145,9 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
             "profile_data": [_profile_data(profile) for profile in load_profiles()],
             "all_code_pages": sorted(escpos.CODE_PAGES),
             "preview": preview,
+            "preview_worker": _first_enabled_worker(config, allow_disabled=True),
+            "crewday_workers": crewday_workers,
+            "crewday_worker_error": crewday_error,
             "results": list(reversed(RECENT_RESULTS[-8:])),
             "template_data": _template_to_payload(config.receipt_template),
             "default_template_data": _template_to_payload(default_receipt_template()),
@@ -155,6 +168,7 @@ def save_settings(
     print_density: Annotated[int, Form()],
     print_speed: Annotated[int, Form()],
     print_schedule_cron: Annotated[str, Form()] = "",
+    timezone: Annotated[str, Form()] = "Asia/Dubai",
     image_logo: Annotated[str | None, Form()] = None,
     supports_print_density: Annotated[str | None, Form()] = None,
     supports_print_speed: Annotated[str | None, Form()] = None,
@@ -182,8 +196,13 @@ def save_settings(
         **(raw.get("print_schedule") or {}),
         "cron": print_schedule_cron.strip(),
     }
-    write_raw_config(config_path_from_env(), raw)
-    _record("Saved printer settings.")
+    raw["timezone"] = timezone.strip() or "Asia/Dubai"
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Printer settings were not saved: {exc}")
+    else:
+        _record("Saved printer settings.")
     return RedirectResponse("/", status_code=303)
 
 
@@ -245,12 +264,10 @@ async def save_workers(
 ) -> RedirectResponse:
     form = await request.form()
     worker_name = [str(value) for value in form.getlist("worker_name")]
-    worker_timezone = [str(value) for value in form.getlist("worker_timezone")]
     worker_schedule = [str(value) for value in form.getlist("worker_schedule")]
     worker_crewday_user_id = [
         str(value) for value in form.getlist("worker_crewday_user_id")
     ]
-    worker_tasks = [str(value) for value in form.getlist("worker_tasks")]
     raw_workers: list[dict[str, object]] = []
     enabled = {
         int(value)
@@ -259,26 +276,20 @@ async def save_workers(
     }
     row_count = min(
         len(worker_name),
-        len(worker_timezone),
         len(worker_schedule),
         len(worker_crewday_user_id),
-        len(worker_tasks),
     )
     for index in range(row_count):
         name = worker_name[index].strip()
-        if index not in enabled or not name:
+        crewday_user_id = worker_crewday_user_id[index].strip()
+        if not name or not crewday_user_id:
             continue
         raw_workers.append(
             {
                 "name": name,
                 "schedule": worker_schedule[index].strip(),
-                "crewday_user_id": worker_crewday_user_id[index].strip() or None,
-                "timezone": worker_timezone[index].strip() or "Asia/Dubai",
-                "tasks": [
-                    line.strip()
-                    for line in worker_tasks[index].splitlines()
-                    if line.strip()
-                ],
+                "crewday_user_id": crewday_user_id,
+                "enabled": index in enabled,
             }
         )
 
@@ -301,8 +312,8 @@ async def save_workers(
 @app.post("/dry-run")
 def dry_run(_: Annotated[None, Depends(require_auth)]) -> Response:
     config = load_config(config_path_from_env())
-    worker = config.workers[0]
-    now = datetime.now(ZoneInfo(worker.timezone))
+    worker = _first_enabled_worker(config)
+    now = datetime.now(ZoneInfo(config.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
     payload = render_receipt(batch, config.printer, now, config.receipt_template)
     _record(f"Rendered {len(payload)} receipt bytes without printing.")
@@ -313,7 +324,7 @@ def dry_run(_: Annotated[None, Depends(require_auth)]) -> Response:
 def print_test(_: Annotated[None, Depends(require_auth)]) -> RedirectResponse:
     config = load_config(config_path_from_env())
     try:
-        result = _print_worker_receipts(config, [config.workers[0].name])
+        result = _print_worker_receipts(config, [_first_enabled_worker(config).name])
     except Exception as exc:
         _record(f"Print failed: {exc}")
     else:
@@ -452,9 +463,17 @@ def _preview_for_first_worker(
     config: AppConfig,
     template: ReceiptTemplateConfig,
 ) -> dict[str, str | int]:
-    worker = config.workers[0]
-    now = datetime.now(ZoneInfo(worker.timezone))
-    batch = build_task_source(config).fetch_task_batch(worker, now=now)
+    worker = _first_enabled_worker(config, allow_disabled=True)
+    now = datetime.now(ZoneInfo(config.timezone))
+    try:
+        batch = build_task_source(config).fetch_task_batch(worker, now=now)
+    except Exception:
+        batch = TaskBatch(
+            worker_name=worker.name,
+            source_label="Preview unavailable",
+            generated_at=now,
+            tasks=(),
+        )
     preview = render_receipt_preview(
         batch,
         config.printer,
@@ -521,15 +540,15 @@ def _record(message: str) -> None:
 
 
 async def _schedule_loop() -> None:
-    last_run_key: tuple[str, str] | None = None
+    last_run_key: tuple[tuple[str, str], ...] | None = None
     while True:
         try:
             config = load_config(config_path_from_env())
-            cron = config.print_schedule.cron
             now = datetime.now().replace(second=0, microsecond=0)
-            run_key = (cron, now.isoformat())
-            if cron and run_key != last_run_key and cron_matches(cron, now):
-                result = _print_worker_receipts(config)
+            due_workers = _scheduled_worker_names(config, now)
+            run_key = tuple((name, now.isoformat()) for name in due_workers)
+            if due_workers and run_key != last_run_key:
+                result = _print_worker_receipts(config, due_workers)
                 last_run_key = run_key
                 _record(
                     f"Scheduled print sent {result['count']} receipt"
@@ -563,6 +582,17 @@ def _requested_worker_names(
     return names or None
 
 
+def _scheduled_worker_names(config: AppConfig, now: datetime) -> list[str]:
+    names: list[str] = []
+    for worker in config.workers:
+        if not worker.enabled:
+            continue
+        cron = worker.schedule or config.print_schedule.cron
+        if cron and cron_matches(cron, now):
+            names.append(worker.name)
+    return names
+
+
 def _print_worker_receipts(
     config: AppConfig,
     worker_names: list[str] | None = None,
@@ -572,9 +602,11 @@ def _print_worker_receipts(
     printer = replace(config.printer, cut=True)
     payload = bytearray()
     for worker in workers:
-        now = datetime.now(ZoneInfo(worker.timezone))
+        now = datetime.now(ZoneInfo(config.timezone))
         batch = task_source.fetch_task_batch(worker, now=now)
         payload += render_receipt(batch, printer, now, config.receipt_template)
+    if not payload:
+        raise ValueError("no workers are enabled in config")
 
     send_to_network_printer(bytes(payload), printer)
     return {
@@ -591,13 +623,81 @@ def _select_workers(
     worker_names: list[str] | None,
 ):
     if worker_names is None:
-        return list(config.workers)
+        return [worker for worker in config.workers if worker.enabled]
 
     workers_by_name = {worker.name: worker for worker in config.workers}
     missing = [name for name in worker_names if name not in workers_by_name]
     if missing:
         raise ValueError(f"worker not found in config: {', '.join(missing)}")
-    return [workers_by_name[name] for name in worker_names]
+    selected = [workers_by_name[name] for name in worker_names]
+    disabled = [worker.name for worker in selected if not worker.enabled]
+    if disabled:
+        raise ValueError(f"worker is disabled in config: {', '.join(disabled)}")
+    return selected
+
+
+def _first_enabled_worker(config: AppConfig, *, allow_disabled: bool = False):
+    for worker in config.workers:
+        if worker.enabled:
+            return worker
+    if allow_disabled and config.workers:
+        return config.workers[0]
+    raise ValueError("no workers are enabled in config")
+
+
+def _load_worker_roster(
+    config: AppConfig,
+) -> tuple[list[dict[str, object]], str | None]:
+    try:
+        crewday_workers = fetch_crewday_workers(config)
+    except Exception as exc:
+        crewday_workers = ()
+        error = str(exc)
+    else:
+        error = None
+
+    if not crewday_workers:
+        crewday_workers = tuple(
+            CrewdayWorker(
+                user_id=worker.crewday_user_id or worker.name,
+                name=worker.name,
+            )
+            for worker in config.workers
+        )
+
+    configured = {
+        worker.crewday_user_id: worker
+        for worker in config.workers
+        if worker.crewday_user_id
+    }
+    rows: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for crewday_worker in crewday_workers:
+        if not crewday_worker.user_id:
+            continue
+        configured_worker = configured.get(crewday_worker.user_id)
+        seen.add(crewday_worker.user_id)
+        rows.append(
+            {
+                "user_id": crewday_worker.user_id,
+                "name": crewday_worker.name,
+                "enabled": configured_worker.enabled if configured_worker else False,
+                "schedule": configured_worker.schedule if configured_worker else "",
+            }
+        )
+
+    for worker in config.workers:
+        if worker.crewday_user_id and worker.crewday_user_id in seen:
+            continue
+        rows.append(
+            {
+                "user_id": worker.crewday_user_id or "",
+                "name": worker.name,
+                "enabled": worker.enabled,
+                "schedule": worker.schedule,
+            }
+        )
+    return rows, error
 
 
 def _profile_data(profile: PrinterProfile) -> dict[str, object]:

@@ -82,8 +82,7 @@ class WorkerConfig:
     name: str
     schedule: str
     crewday_user_id: str | None
-    timezone: str
-    tasks: tuple[str, ...]
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -93,6 +92,7 @@ class AppConfig:
     crewday: CrewdayConfig
     print_schedule: PrintScheduleConfig
     receipt_template: ReceiptTemplateConfig
+    timezone: str
     workers: tuple[WorkerConfig, ...]
 
 
@@ -117,3 +117,9 @@ class TaskBatch:
     source_label: str
     generated_at: datetime
     tasks: tuple[ReceiptTask, ...]
+
+
+@dataclass(frozen=True)
+class CrewdayWorker:
+    user_id: str
+    name: str
