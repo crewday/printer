@@ -283,3 +283,120 @@ workers:
     config = load_config(path)
 
     assert config.printers[0].code_page == "cp858"
+
+
+def test_load_config_usb_escpos_printer(tmp_path: Path) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: mock
+printers:
+  - name: USB Printer
+    type: usb_escpos
+    profile: epson_tm_t20ii
+    usb_vendor_id: 0x04b8
+    usb_product_id: 0x0e15
+    timeout_seconds: 5
+    paper_columns: 48
+    code_page: cp1252
+workers:
+  - name: Amina
+    enabled: true
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.printers[0].type == "usb_escpos"
+    assert config.printers[0].usb_vendor_id == 0x04B8
+    assert config.printers[0].usb_product_id == 0x0E15
+    assert config.printers[0].host == ""
+    assert config.printers[0].port == 0
+
+
+def test_load_config_cups_escpos_printer(tmp_path: Path) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: mock
+printers:
+  - name: CUPS Printer
+    type: cups_escpos
+    profile: epson_tm_t20ii
+    cups_printer_name: TM-T20II
+    timeout_seconds: 10
+    paper_columns: 48
+    code_page: cp1252
+workers:
+  - name: Amina
+    enabled: true
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.printers[0].type == "cups_escpos"
+    assert config.printers[0].cups_printer_name == "TM-T20II"
+    assert config.printers[0].timeout_seconds == 10
+
+
+def test_load_config_rejects_usb_printer_without_vendor_id(tmp_path: Path) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: mock
+printers:
+  - name: Bad USB
+    type: usb_escpos
+    profile: epson_tm_t20ii
+workers:
+  - name: Amina
+    enabled: true
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        load_config(path)
+    except ValueError as exc:
+        assert "usb_vendor_id" in str(exc)
+    else:
+        raise AssertionError("missing usb_vendor_id should fail config loading")
+
+
+def test_load_config_rejects_cups_printer_without_name(tmp_path: Path) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: mock
+printers:
+  - name: Bad CUPS
+    type: cups_escpos
+    profile: epson_tm_t20ii
+workers:
+  - name: Amina
+    enabled: true
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        load_config(path)
+    except ValueError as exc:
+        assert "cups_printer_name" in str(exc)
+    else:
+        raise AssertionError("missing cups_printer_name should fail config loading")

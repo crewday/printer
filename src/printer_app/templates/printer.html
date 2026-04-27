@@ -9,7 +9,16 @@
         <span class="dot dot--moss"></span>
         {{ printer.profile }}
       </span>
+      <span class="chip chip--moss chip--sm">
+        {{ printer.type }}
+      </span>
+      {% if printer.type == "network_escpos" %}
       <code>{{ printer.host }}:{{ printer.port }}</code>
+      {% elif printer.type == "usb_escpos" %}
+      <code>USB 0x{{ "%04x" | format(printer.usb_vendor_id) }}:0x{{ "%04x" | format(printer.usb_product_id) }}</code>
+      {% elif printer.type == "cups_escpos" %}
+      <code>CUPS:{{ printer.cups_printer_name }}</code>
+      {% endif %}
       <span>· {{ printer.paper_columns }} columns</span>
     </p>
   </div>
@@ -21,9 +30,10 @@
     <form class="panel" method="post" action="/printer/{{ printer.name }}/settings">
       {% call panel_head("Settings", "Printer connection") %}
       {% endcall %}
-      <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Network address and ESC/POS profile for <strong>{{ printer.name }}</strong>. Saved to the bind-mounted YAML config.</p>
+      <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Connection and ESC/POS profile for <strong>{{ printer.name }}</strong>. Saved to the bind-mounted YAML config.</p>
 
       <div class="form">
+        {% if printer.type == "network_escpos" %}
         <div class="form__row">
           <label class="field">
             <span class="field__label">Host</span>
@@ -39,6 +49,38 @@
             <span class="field__hint">seconds</span>
           </label>
         </div>
+        {% elif printer.type == "usb_escpos" %}
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Vendor ID</span>
+            <input class="input" name="usb_vendor_id" value="{{ "0x%04x" | format(printer.usb_vendor_id) }}" required>
+            <span class="field__hint">hex, e.g. 0x04b8</span>
+          </label>
+          <label class="field">
+            <span class="field__label">Product ID</span>
+            <input class="input" name="usb_product_id" value="{{ "0x%04x" | format(printer.usb_product_id) }}" required>
+            <span class="field__hint">hex, e.g. 0x0e15</span>
+          </label>
+          <label class="field">
+            <span class="field__label">Timeout</span>
+            <input class="input" name="timeout_seconds" type="number" step="0.1" value="{{ printer.timeout_seconds }}" required>
+            <span class="field__hint">seconds</span>
+          </label>
+        </div>
+        {% elif printer.type == "cups_escpos" %}
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">CUPS Printer</span>
+            <input class="input" name="cups_printer_name" value="{{ printer.cups_printer_name }}" required>
+            <span class="field__hint">CUPS queue name</span>
+          </label>
+          <label class="field">
+            <span class="field__label">Timeout</span>
+            <input class="input" name="timeout_seconds" type="number" step="0.1" value="{{ printer.timeout_seconds }}" required>
+            <span class="field__hint">seconds</span>
+          </label>
+        </div>
+        {% endif %}
 
         <h3 class="section-title">Paper &amp; ESC/POS</h3>
         <div class="form__row">

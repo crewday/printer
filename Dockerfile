@@ -10,7 +10,7 @@ ENV PRINTER_CONFIG_SECRET_KEY=""
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libcairo2 \
+    && apt-get install -y --no-install-recommends libcairo2 libusb-1.0-0 cups-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./

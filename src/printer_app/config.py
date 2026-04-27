@@ -76,6 +76,51 @@ def _default_printer_raw(name: str, host: str | None = None) -> dict[str, Any]:
     }
 
 
+def _default_usb_printer_raw(
+    name: str, vendor_id: int, product_id: int
+) -> dict[str, Any]:
+    profile = default_profile()
+    return {
+        "name": name,
+        "type": "usb_escpos",
+        "profile": profile.id,
+        "host": "",
+        "port": 0,
+        "timeout_seconds": 5,
+        "paper_columns": profile.paper_columns,
+        "code_page": profile.code_pages[0],
+        "image_logo": profile.image_logo,
+        "supports_print_density": profile.supports_print_density,
+        "supports_print_speed": profile.supports_print_speed,
+        "print_density": profile.print_density,
+        "print_speed": profile.print_speed,
+        "cut": profile.cut,
+        "usb_vendor_id": vendor_id,
+        "usb_product_id": product_id,
+    }
+
+
+def _default_cups_printer_raw(name: str, cups_name: str) -> dict[str, Any]:
+    profile = default_profile()
+    return {
+        "name": name,
+        "type": "cups_escpos",
+        "profile": profile.id,
+        "host": "",
+        "port": 0,
+        "timeout_seconds": 5,
+        "paper_columns": profile.paper_columns,
+        "code_page": profile.code_pages[0],
+        "image_logo": profile.image_logo,
+        "supports_print_density": profile.supports_print_density,
+        "supports_print_speed": profile.supports_print_speed,
+        "print_density": profile.print_density,
+        "print_speed": profile.print_speed,
+        "cut": profile.cut,
+        "cups_printer_name": cups_name,
+    }
+
+
 def default_config() -> dict[str, Any]:
     ui_username = os.environ.get("PRINTER_UI_USERNAME", "admin")
     crewday_token = os.environ.get("CREWDAY_API_TOKEN")
@@ -199,12 +244,16 @@ def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
         names.add(name)
         profile_id = str(printer_raw.get("profile", default_profile().id))
         profile = get_profile(profile_id) or default_profile()
+        printer_type = str(printer_raw.get("type", "network_escpos"))
+        is_network = printer_type == "network_escpos"
         printer = PrinterConfig(
             name=name,
-            type=str(printer_raw.get("type", "network_escpos")),
+            type=printer_type,
             profile=profile_id,
-            host=str(printer_raw.get("host", "192.168.20.15")),
-            port=int(printer_raw.get("port", 9100)),
+            host=str(
+                printer_raw.get("host", "192.168.20.15" if is_network else "")
+            ),
+            port=int(printer_raw.get("port", 9100 if is_network else 0)),
             timeout_seconds=float(printer_raw.get("timeout_seconds", 5)),
             paper_columns=int(
                 printer_raw.get("paper_columns", profile.paper_columns)
@@ -227,6 +276,9 @@ def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
             ),
             print_speed=int(printer_raw.get("print_speed", profile.print_speed)),
             cut=bool(printer_raw.get("cut", profile.cut)),
+            usb_vendor_id=_parse_optional_int(printer_raw.get("usb_vendor_id")),
+            usb_product_id=_parse_optional_int(printer_raw.get("usb_product_id")),
+            cups_printer_name=printer_raw.get("cups_printer_name"),
         )
         validate_printer_config(printer)
         printers.append(printer)
@@ -292,17 +344,37 @@ def validate_receipt_template(template: ReceiptTemplateConfig) -> None:
             raise ValueError("receipt_template section scale must be positive")
 
 
+def _parse_optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(str(value), 0)
+
+
 def validate_printer_config(printer: PrinterConfig) -> None:
-    if printer.type != "network_escpos":
+    if printer.type not in ("network_escpos", "usb_escpos", "cups_escpos"):
         raise ValueError(f"unsupported printer.type: {printer.type}")
     if printer.profile not in profile_ids():
         raise ValueError(f"unsupported printer.profile: {printer.profile}")
     if printer.code_page not in escpos.CODE_PAGES:
         raise ValueError(f"unsupported printer.code_page: {printer.code_page}")
-    if not printer.host:
-        raise ValueError("printer.host is required")
-    if not 1 <= printer.port <= 65535:
-        raise ValueError("printer.port must be between 1 and 65535")
+    if printer.type == "network_escpos":
+        if not printer.host:
+            raise ValueError("printer.host is required for network_escpos printers")
+        if not 1 <= printer.port <= 65535:
+            raise ValueError("printer.port must be between 1 and 65535")
+    if printer.type == "usb_escpos":
+        if printer.usb_vendor_id is None:
+            raise ValueError(
+                "printer.usb_vendor_id is required for usb_escpos printers"
+            )
+        if printer.usb_product_id is None:
+            raise ValueError(
+                "printer.usb_product_id is required for usb_escpos printers"
+            )
+    if printer.type == "cups_escpos" and not printer.cups_printer_name:
+        raise ValueError(
+            "printer.cups_printer_name is required for cups_escpos printers"
+        )
     if printer.timeout_seconds <= 0:
         raise ValueError("printer.timeout_seconds must be positive")
     if not 24 <= printer.paper_columns <= 64:

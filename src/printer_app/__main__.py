@@ -11,7 +11,7 @@ from printer_app.config import config_path_from_env, ensure_config, load_config
 from printer_app.models import WorkerConfig
 from printer_app.renderer import receipt_text_preview, render_black_test, render_receipt
 from printer_app.task_source import build_task_source
-from printer_app.transport import send_to_network_printer
+from printer_app.transport import printer_connection_label, send_to_printer
 
 
 def print_test(
@@ -31,10 +31,10 @@ def print_test(
         sys.stdout.buffer.write(payload)
         return 0
 
-    send_to_network_printer(payload, printer)
+    send_to_printer(payload, printer)
     print(
         f"printed {len(payload)} bytes for {worker.name} "
-        f"to {printer.host}:{printer.port}",
+        f"to {printer_connection_label(printer)}",
         flush=True,
     )
     return 0
@@ -80,10 +80,10 @@ def black_test(
         sys.stdout.buffer.write(payload)
         return 0
 
-    send_to_network_printer(payload, printer)
+    send_to_printer(payload, printer)
     print(
         f"printed {len(payload)} black-test bytes "
-        f"to {printer.host}:{printer.port} "
+        f"to {printer_connection_label(printer)} "
         f"with density={printer.print_density} speed={printer.print_speed}",
         flush=True,
     )

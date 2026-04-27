@@ -47,7 +47,7 @@ from printer_app.renderer import (
 )
 from printer_app.secrets import secret_key_configured
 from printer_app.task_source import build_task_source, fetch_crewday_workers
-from printer_app.transport import send_to_network_printer
+from printer_app.transport import printer_connection_label, send_to_printer
 
 RECENT_RESULTS: list[str] = []
 SCHEDULER_TASK: asyncio.Task[None] | None = None
@@ -261,18 +261,21 @@ def printer_detail(
 def save_printer_settings(
     name: str,
     _: Annotated[None, Depends(require_auth)],
-    host: Annotated[str, Form()],
-    port: Annotated[int, Form()],
-    timeout_seconds: Annotated[float, Form()],
-    paper_columns: Annotated[int, Form()],
-    profile: Annotated[str, Form()],
-    code_page: Annotated[str, Form()],
-    print_density: Annotated[int, Form()],
-    print_speed: Annotated[int, Form()],
+    host: Annotated[str, Form()] = "",
+    port: Annotated[int, Form()] = 0,
+    timeout_seconds: Annotated[float, Form()] = 5.0,
+    paper_columns: Annotated[int, Form()] = 48,
+    profile: Annotated[str, Form()] = "epson_tm_t20ii",
+    code_page: Annotated[str, Form()] = "cp1252",
+    print_density: Annotated[int, Form()] = 8,
+    print_speed: Annotated[int, Form()] = 6,
     image_logo: Annotated[str | None, Form()] = None,
     supports_print_density: Annotated[str | None, Form()] = None,
     supports_print_speed: Annotated[str | None, Form()] = None,
     cut: Annotated[str | None, Form()] = None,
+    usb_vendor_id: Annotated[str | None, Form()] = None,
+    usb_product_id: Annotated[str | None, Form()] = None,
+    cups_printer_name: Annotated[str | None, Form()] = None,
 ) -> RedirectResponse:
     config = load_config(config_path_from_env())
     _resolve_printer(config, name)
@@ -295,6 +298,12 @@ def save_printer_settings(
                     "cut": cut == "on",
                 }
             )
+            if usb_vendor_id is not None:
+                entry["usb_vendor_id"] = usb_vendor_id
+            if usb_product_id is not None:
+                entry["usb_product_id"] = usb_product_id
+            if cups_printer_name is not None:
+                entry["cups_printer_name"] = cups_printer_name
             break
     try:
         write_raw_config(config_path_from_env(), raw)
@@ -336,7 +345,7 @@ def printer_print_test(
     else:
         _record(
             f"Printed {result['bytes']} bytes "
-            f"to {printer.host}:{printer.port}."
+            f"to {printer_connection_label(printer)}."
         )
     return RedirectResponse(f"/printer/{name}", status_code=303)
 
@@ -353,7 +362,7 @@ def printer_black_test(
     printer = replace(printer, print_density=density, print_speed=speed)
     payload = render_black_test(printer)
     try:
-        send_to_network_printer(payload, printer)
+        send_to_printer(payload, printer)
     except Exception as exc:
         _record(f"Black test failed for {name!r}: {exc}")
     else:
@@ -370,12 +379,12 @@ def printer_font_test(
     printer = _resolve_printer(config, name)
     payload = render_font_test(printer)
     try:
-        send_to_network_printer(payload, printer)
+        send_to_printer(payload, printer)
     except Exception as exc:
         _record(f"Font test failed for {name!r}: {exc}")
     else:
         _record(
-            f"Printed font test to {printer.host}:{printer.port} "
+            f"Printed font test to {printer_connection_label(printer)} "
             f"({name!r}) with {printer.code_page}."
         )
     return RedirectResponse(f"/printer/{name}", status_code=303)
@@ -404,7 +413,7 @@ def printer_calibration_wizard(
         title=_calibration_title(phase),
     )
     try:
-        send_to_network_printer(payload, printer)
+        send_to_printer(payload, printer)
     except Exception as exc:
         _record(f"Calibration wizard failed for {name!r}: {exc}")
     else:
@@ -736,7 +745,7 @@ def _print_worker_receipts(
                 batch, printer_config, now, config.receipt_template
             )
         if payload:
-            send_to_network_printer(bytes(payload), printer_config)
+            send_to_printer(bytes(payload), printer_config)
             total_bytes += len(payload)
             printed_workers.extend(w.name for w in printer_workers)
 

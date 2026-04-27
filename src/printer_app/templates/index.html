@@ -22,9 +22,15 @@
                 <span class="printer-card__meta">
                   <span class="chip chip--moss chip--sm">
                     <span class="dot dot--moss"></span>
-                    {{ printer.profile }}
+                    {{ printer.type }}
                   </span>
+                  {% if printer.type == "network_escpos" %}
                   <code>{{ printer.host }}:{{ printer.port }}</code>
+                  {% elif printer.type == "usb_escpos" %}
+                  <code>USB</code>
+                  {% elif printer.type == "cups_escpos" %}
+                  <code>CUPS:{{ printer.cups_printer_name }}</code>
+                  {% endif %}
                   <span>{{ printer.paper_columns }} cols</span>
                 </span>
               </div>

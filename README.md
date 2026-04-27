@@ -4,7 +4,13 @@
 
 Docker-hosted Python service for printing enabled Crewday workers' task lists to a thermal receipt printer.
 
-The first slice is a containerized ESC/POS probe that can dry-run render a sample receipt or send it to a network printer.
+The first slice is a containerized ESC/POS probe that can dry-run render a sample receipt or send it to a printer. Three transport backends are supported:
+
+| Type | Config `type` | Connection |
+|---|---|---|
+| Network (TCP) | `network_escpos` | Raw TCP socket to `host:port` |
+| USB | `usb_escpos` | Direct USB via vendor/product ID |
+| CUPS | `cups_escpos` | Raw ESC/POS through the CUPS `lp` command |
 
 Printer profiles live in `src/printer_app/profiles/*.yaml`. A profile declares preset columns, cut behavior, supported code pages, image/logo support, and whether density/speed ESC/POS commands should be sent. Add a printer preset by dropping another YAML file in that folder.
 
@@ -99,3 +105,54 @@ docker compose run --rm printer uv run --group dev pytest
 docker compose run --rm printer uv run --group dev ruff check .
 docker compose run --rm printer uv run --group dev ruff format .
 ```
+
+## Printer Configuration
+
+Each printer in `config/printer.yaml` has a `type` field that selects the transport backend. Common fields like `profile`, `paper_columns`, and `code_page` are shared across all types.
+
+### Network printer (`network_escpos`)
+
+```yaml
+printers:
+  - name: Network
+    type: network_escpos
+    host: 192.168.20.15
+    port: 9100
+    timeout_seconds: 5
+    profile: epson_tm_t20ii
+    paper_columns: 48
+    code_page: cp1252
+    cut: true
+```
+
+### USB printer (`usb_escpos`)
+
+```yaml
+printers:
+  - name: USB
+    type: usb_escpos
+    usb_vendor_id: 0x04b8
+    usb_product_id: 0x0e15
+    profile: epson_tm_t20ii
+    paper_columns: 48
+    code_page: cp1252
+    cut: true
+```
+
+Use `lsusb` on the host to discover vendor and product IDs. For Docker, pass the USB bus with `--device /dev/bus/usb` or add `devices: ["/dev/bus/usb:/dev/bus/usb"]` in docker-compose.
+
+### CUPS printer (`cups_escpos`)
+
+```yaml
+printers:
+  - name: CUPS
+    type: cups_escpos
+    cups_printer_name: TM-T20II
+    timeout_seconds: 10
+    profile: epson_tm_t20ii
+    paper_columns: 48
+    code_page: cp1252
+    cut: true
+```
+
+The printer must be configured as a raw queue in CUPS. For Docker access to a host CUPS daemon, mount the CUPS socket: `-v /var/run/cups/cups.sock:/var/run/cups/cups.sock` and set `CUPS_SERVER=/var/run/cups/cups.sock`.

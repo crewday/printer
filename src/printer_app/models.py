@@ -26,6 +26,9 @@ class PrinterConfig:
     print_density: int
     print_speed: int
     cut: bool
+    usb_vendor_id: int | None = None
+    usb_product_id: int | None = None
+    cups_printer_name: str | None = None
 
 
 @dataclass(frozen=True)

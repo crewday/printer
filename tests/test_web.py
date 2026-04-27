@@ -62,7 +62,7 @@ def test_api_prints_all_workers_by_default_with_cuts(
     monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
     monkeypatch.setattr(
         web,
-        "send_to_network_printer",
+        "send_to_printer",
         lambda payload, printer: sent_payloads.append(payload),
     )
 
@@ -127,7 +127,7 @@ def test_api_prints_requested_workers_from_json(
     monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
     monkeypatch.setattr(
         web,
-        "send_to_network_printer",
+        "send_to_printer",
         lambda payload, printer: sent_payloads.append(payload),
     )
 
@@ -429,7 +429,7 @@ def test_calibration_wizard_prints_compact_batch_with_one_cut_at_end(
     monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
     monkeypatch.setattr(
         web,
-        "send_to_network_printer",
+        "send_to_printer",
         lambda payload, printer: sent_payloads.append(payload),
     )
 

@@ -20,6 +20,12 @@ services:
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
     ports:
       - "8087:8080"
+    # Uncomment for USB printer access:
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+    # Uncomment for CUPS printer access (requires CUPS on host):
+    # volumes:
+    #   - /var/run/cups/cups.sock:/var/run/cups/cups.sock
 
   dev:
     build: .
@@ -42,4 +48,10 @@ services:
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
     ports:
       - "8087:8080"
+    # Uncomment for USB printer access:
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+    # Uncomment for CUPS printer access (requires CUPS on host):
+    # volumes:
+    #   - /var/run/cups/cups.sock:/var/run/cups/cups.sock
     command: ["uv", "run", "--group", "dev", "watchfiles", "uv run python -m printer_app serve --host 0.0.0.0 --port 8080", "/app/src", "/config"]
