@@ -14,11 +14,11 @@ def test_ensure_config_creates_yaml(tmp_path: Path) -> None:
     assert path.exists()
 
     config = load_config(path)
-    assert config.printer.profile == "epson_tm_t20ii"
-    assert config.printer.code_page == "cp858"
-    assert config.printer.image_logo is True
-    assert config.printer.supports_print_density is True
-    assert config.printer.supports_print_speed is True
+    assert config.printers[0].profile == "epson_tm_t20ii"
+    assert config.printers[0].code_page == "cp858"
+    assert config.printers[0].image_logo is True
+    assert config.printers[0].supports_print_density is True
+    assert config.printers[0].supports_print_speed is True
     assert config.crewday.source == "mock"
     assert config.crewday.workspace_slug is None
     assert config.print_schedule.cron == ""
@@ -40,20 +40,21 @@ ui:
 crewday:
   source: mock
 timezone: Europe/Paris
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
-  paper_columns: 48
-  code_page: cp437
-  image_logo: true
-  supports_print_density: true
-  supports_print_speed: true
-  print_density: 8
-  print_speed: 6
-  cut: true
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
+    paper_columns: 48
+    code_page: cp437
+    image_logo: true
+    supports_print_density: true
+    supports_print_speed: true
+    print_density: 8
+    print_speed: 6
+    cut: true
 workers:
   - name: Amina
     schedule: "0 7 * * *"
@@ -80,12 +81,13 @@ crewday:
   source: mock
 print_schedule:
   cron: "0 8 * * 1-5"
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
 workers:
   - name: Amina
     tasks:
@@ -116,12 +118,13 @@ receipt_template:
     - type: separator
       trailing_blank: false
     - type: tasks
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
 workers:
   - name: Amina
     tasks:
@@ -154,12 +157,13 @@ crewday:
   source: mock
 print_schedule:
   cron: "0 8 *"
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
 workers:
   - name: Amina
     tasks:
@@ -184,12 +188,13 @@ ui:
   username: admin
 crewday:
   source: mock
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
 workers:
   - name: Amina
     tasks:
@@ -200,8 +205,8 @@ workers:
 
     config = load_config(path)
 
-    assert config.printer.paper_columns == 48
-    assert config.printer.code_page == "cp858"
+    assert config.printers[0].paper_columns == 48
+    assert config.printers[0].code_page == "cp858"
 
 
 def test_config_encrypts_stored_secrets_when_key_is_set(
@@ -220,12 +225,13 @@ crewday:
   base_url: http://crewday:8000
   api_token: mip_key_secret
   workspace_slug: home
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
 workers:
   - name: Amina
     crewday_user_id: 01HXUSER
@@ -247,7 +253,7 @@ workers:
     assert load_config(path).ui.username == "admin"
     assert load_config(path).crewday.api_token == "mip_key_secret"
     assert load_config(path).crewday.workspace_slug == "home"
-    assert config.printer.cut is True
+    assert config.printers[0].cut is True
 
 
 def test_config_can_override_profile_code_page(tmp_path: Path) -> None:
@@ -258,13 +264,14 @@ ui:
   username: admin
 crewday:
   source: mock
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
-  code_page: cp858
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
+    code_page: cp858
 workers:
   - name: Amina
     tasks:
@@ -275,4 +282,4 @@ workers:
 
     config = load_config(path)
 
-    assert config.printer.code_page == "cp858"
+    assert config.printers[0].code_page == "cp858"

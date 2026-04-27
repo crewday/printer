@@ -22,12 +22,13 @@ crewday:
   base_url: http://crewday:8000
   api_token: mip_key_secret
   workspace_slug: villa-sud
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
 workers:
   - name: Amina
     crewday_user_id: 01HXUSER
@@ -99,12 +100,13 @@ crewday:
   base_url: http://crewday:8000
   api_token: mip_key_secret
   workspace_slug: villa-sud
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
 workers:
   - name: Existing
     crewday_user_id: 01HXEXISTING

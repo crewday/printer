@@ -1,0 +1,182 @@
+{% macro panel_head(eyebrow, title, sub="") %}
+<div class="panel__head">
+  <div class="panel__head-stack">
+    <span class="panel__eyebrow">{{ eyebrow }}</span>
+    <h2 class="panel__title">{{ title }}</h2>
+    {% if sub %}<p class="panel__sub">{{ sub }}</p>{% endif %}
+  </div>
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+
+{% macro calibration_panel(printer, config) %}
+<section class="panel">
+  {% call panel_head("Calibration", "Density &amp; speed wizard") %}
+  {% endcall %}
+  <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">
+    Runs the documented sweep as compact strips on <strong>{{ printer.name }}</strong>. Each step cuts only after the strip finishes.
+  </p>
+
+  <form method="post" action="/printer/{{ printer.name }}/calibration/wizard" class="wizard">
+    <div class="form__row">
+      <label class="field">
+        <span class="field__label">Best density</span>
+        <input class="input" name="density" type="number" min="0" max="255" value="{{ printer.print_density }}">
+      </label>
+      <label class="field">
+        <span class="field__label">Best speed</span>
+        <input class="input" name="speed" type="number" min="0" max="17" value="{{ printer.print_speed }}">
+      </label>
+    </div>
+    <div class="wizard__steps" role="group" aria-label="Calibration wizard steps">
+      <button type="submit" name="phase" value="quick" class="wizard-step">
+        <span class="wizard-step__num">1</span>
+        <span class="wizard-step__body">
+          <strong>Quick sweep</strong>
+          <small>4/12, 6/9, 8/6, 10/4</small>
+        </span>
+      </button>
+      <button type="submit" name="phase" value="refine_density" class="wizard-step">
+        <span class="wizard-step__num">2</span>
+        <span class="wizard-step__body">
+          <strong>Refine density</strong>
+          <small>Uses the speed above</small>
+        </span>
+      </button>
+      <button type="submit" name="phase" value="refine_speed" class="wizard-step">
+        <span class="wizard-step__num">3</span>
+        <span class="wizard-step__body">
+          <strong>Refine speed</strong>
+          <small>Uses the density above</small>
+        </span>
+      </button>
+    </div>
+    <p class="field__hint">After choosing final values, update Density and Speed in Printer connection, then save settings.</p>
+  </form>
+
+  <hr class="panel__divider">
+
+  <form method="post" action="/printer/{{ printer.name }}/black-test" class="form">
+    {% call panel_head("Feature sample", "Black test") %}
+    {% endcall %}
+    <div class="form__row">
+      <label class="field">
+        <span class="field__label">Density</span>
+        <input class="input" name="density" type="number" min="0" max="255" value="{{ printer.print_density }}">
+      </label>
+      <label class="field">
+        <span class="field__label">Speed</span>
+        <input class="input" name="speed" type="number" min="0" max="17" value="{{ printer.print_speed }}">
+      </label>
+    </div>
+    <div class="btn-group btn-group--end">
+      <button type="submit" class="btn">Print black test</button>
+    </div>
+  </form>
+
+  <hr class="panel__divider">
+
+  {% call panel_head("Feature sample", "Fonts &amp; emphasis") %}
+  {% endcall %}
+  <p class="panel__sub">
+    Prints font A/B, bold, underline, double width/height, alignment,
+    reverse text, and symbols on <strong>{{ printer.name }}</strong>.
+  </p>
+  <form method="post" action="/printer/{{ printer.name }}/font-test">
+    <div class="btn-group btn-group--end">
+      <button type="submit" class="btn">Print font test</button>
+    </div>
+  </form>
+
+  <hr class="panel__divider">
+
+  {% call panel_head("Live test", "First worker receipt") %}
+  {% endcall %}
+  <p class="panel__sub">
+    Prints the rendered task list for
+    <strong>{{ preview_worker.name }}</strong>
+    to <strong>{{ printer.name }}</strong>.
+  </p>
+  <form method="post" action="/printer/{{ printer.name }}/print-test">
+    <div class="btn-group btn-group--end">
+      <button type="submit" class="btn btn--rust">Send to printer</button>
+    </div>
+  </form>
+</section>
+{% endmacro %}
+
+
+{% macro receipt_preview(preview, preview_worker, printer, printers, active_printer_name) %}
+<section class="panel panel--soft">
+  <div class="panel__head">
+    <div class="panel__head-stack">
+      <span class="panel__eyebrow">Preview</span>
+      <h2 class="panel__title">{{ preview_worker.name }}'s receipt</h2>
+      <p class="panel__sub">Rendered from the dry-run ESC/POS bytes at {{ printer.paper_columns }} columns. No paper consumed.</p>
+    </div>
+    <span class="chip chip--sand"><span class="dot dot--sand"></span>dry run</span>
+  </div>
+
+  <div
+    class="receipt"
+    style="--receipt-width-dots: {{ preview.width_dots }}px;"
+    role="img"
+    aria-label="Receipt preview">
+    <div class="receipt__paper">
+      <img
+        class="receipt__image"
+        src="{{ preview.src }}"
+        width="{{ preview.width_dots }}"
+        height="{{ preview.height_dots }}"
+        alt="{{ preview_worker.name }} receipt preview">
+    </div>
+  </div>
+
+  <div class="preview-bar">
+    <label class="field preview-bar__field">
+      <span class="field__label">Printer width</span>
+      <select class="input" name="preview_printer" form="dry-run-form">
+        {% for p in printers %}
+          <option value="{{ p.name }}" {% if p.name == active_printer_name %}selected{% endif %}>
+            {{ p.name }} ({{ p.paper_columns }} cols)
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <form method="post" action="/printer/{{ active_printer_name }}/dry-run" id="dry-run-form">
+      <button type="submit" class="btn btn--ghost">Download bytes</button>
+    </form>
+  </div>
+</section>
+{% endmacro %}
+
+
+{% macro activity_log(results) %}
+<section class="panel">
+  {% call panel_head("Activity", "Recent commands") %}
+  {% endcall %}
+  <p class="panel__sub" style="margin-top:-0.5rem;">In-memory log of the last few actions performed from this UI.</p>
+
+  {% if results %}
+    <ul class="log">
+      {% for result in results %}
+        {% set parts = result.split(' ', 1) %}
+        {% set stamp = parts[0] %}
+        {% set msg   = parts[1] if parts|length > 1 else '' %}
+        {% set is_err = 'failed' in msg|lower or 'error' in msg|lower %}
+        <li class="log__item {% if is_err %}log__item--err{% endif %}">
+          <span class="log__time">{{ stamp }}</span>
+          <span class="dot {% if is_err %}dot--rust{% else %}dot--moss{% endif %} log__dot"></span>
+          <span class="log__msg">{{ msg }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty">
+      <span class="empty__title">No commands yet</span>
+      <span class="empty__sub">Save settings, print a calibration sheet, or render a dry-run preview to see entries here.</span>
+    </div>
+  {% endif %}
+</section>
+{% endmacro %}

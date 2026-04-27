@@ -21,27 +21,30 @@ crewday:
 print_schedule:
   cron: ""
 timezone: Asia/Dubai
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 127.0.0.1
-  port: 9100
-  timeout_seconds: 5
-  paper_columns: 48
-  code_page: cp858
-  image_logo: true
-  supports_print_density: true
-  supports_print_speed: true
-  print_density: 8
-  print_speed: 6
-  cut: false
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
+    paper_columns: 48
+    code_page: cp858
+    image_logo: true
+    supports_print_density: true
+    supports_print_speed: true
+    print_density: 8
+    print_speed: 6
+    cut: false
 workers:
   - name: Vincent
     crewday_user_id: user-1
     enabled: true
+    printer: Default
   - name: Amina
     crewday_user_id: user-2
     enabled: true
+    printer: Default
 """,
         encoding="utf-8",
     )
@@ -319,6 +322,7 @@ def test_save_workers_round_trips_to_yaml(tmp_path: Path, monkeypatch) -> None:
         "worker_name": ["Vincent", "Amina", "Nora"],
         "worker_schedule": ["0 8 * * *", "", ""],
         "worker_crewday_user_id": ["user-1", "user-2", "user-3"],
+        "worker_printer": ["Default", "Default", "Default"],
     }
     response = client.post(
         "/workers",
@@ -431,7 +435,7 @@ def test_calibration_wizard_prints_compact_batch_with_one_cut_at_end(
 
     client = TestClient(web.app)
     response = client.post(
-        "/calibration/wizard",
+        "/printer/Default/calibration/wizard",
         data={"phase": "quick", "density": "8", "speed": "6"},
         auth=("admin", "admin"),
         follow_redirects=False,

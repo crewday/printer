@@ -12,6 +12,7 @@ class UIConfig:
 
 @dataclass(frozen=True)
 class PrinterConfig:
+    name: str
     type: str
     profile: str
     host: str
@@ -83,17 +84,34 @@ class WorkerConfig:
     schedule: str
     crewday_user_id: str | None
     enabled: bool = True
+    printer: str = ""
 
 
 @dataclass(frozen=True)
 class AppConfig:
     ui: UIConfig
-    printer: PrinterConfig
+    printers: tuple[PrinterConfig, ...]
     crewday: CrewdayConfig
     print_schedule: PrintScheduleConfig
     receipt_template: ReceiptTemplateConfig
     timezone: str
     workers: tuple[WorkerConfig, ...]
+
+    def printer_by_name(self, name: str) -> PrinterConfig | None:
+        for printer in self.printers:
+            if printer.name == name:
+                return printer
+        return None
+
+    def first_printer(self) -> PrinterConfig:
+        return self.printers[0]
+
+    def printer_for_worker(self, worker: WorkerConfig) -> PrinterConfig:
+        if worker.printer:
+            found = self.printer_by_name(worker.printer)
+            if found is not None:
+                return found
+        return self.first_printer()
 
 
 @dataclass(frozen=True)

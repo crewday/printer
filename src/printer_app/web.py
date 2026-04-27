@@ -31,9 +31,11 @@ from printer_app.cron import cron_matches
 from printer_app.models import (
     AppConfig,
     CrewdayWorker,
+    PrinterConfig,
     PrinterProfile,
     ReceiptTemplateConfig,
     TaskBatch,
+    WorkerConfig,
 )
 from printer_app.profiles import get_profile, load_profiles
 from printer_app.renderer import (
@@ -130,10 +132,16 @@ def require_auth(
         )
 
 
+def _resolve_printer(config: AppConfig, name: str) -> PrinterConfig:
+    printer = config.printer_by_name(name)
+    if printer is None:
+        raise HTTPException(status_code=404, detail=f"printer not found: {name}")
+    return printer
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLResponse:
     config = load_config(config_path_from_env())
-    preview = _preview_for_first_worker(config, config.receipt_template)
     crewday_workers, crewday_error = _load_worker_roster(config)
     return templates.TemplateResponse(
         request,
@@ -141,11 +149,6 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
         {
             "config": config,
             "profiles": load_profiles(),
-            "selected_profile": get_profile(config.printer.profile),
-            "profile_data": [_profile_data(profile) for profile in load_profiles()],
-            "all_code_pages": sorted(escpos.CODE_PAGES),
-            "preview": preview,
-            "preview_worker": _first_enabled_worker(config, allow_disabled=True),
             "crewday_workers": crewday_workers,
             "crewday_worker_error": crewday_error,
             "results": list(reversed(RECENT_RESULTS[-8:])),
@@ -157,7 +160,106 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
 
 
 @app.post("/settings")
-def save_settings(
+def save_schedule(
+    _: Annotated[None, Depends(require_auth)],
+    print_schedule_cron: Annotated[str, Form()] = "",
+    timezone: Annotated[str, Form()] = "Asia/Dubai",
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    raw["print_schedule"] = {
+        **(raw.get("print_schedule") or {}),
+        "cron": print_schedule_cron.strip(),
+    }
+    raw["timezone"] = timezone.strip() or "Asia/Dubai"
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Schedule settings were not saved: {exc}")
+    else:
+        _record("Saved schedule settings.")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/printers/add")
+def add_printer(
+    _: Annotated[None, Depends(require_auth)],
+    name: Annotated[str, Form()],
+    profile: Annotated[str, Form()],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    printer_name = name.strip()
+    if not printer_name:
+        _record("Printer name cannot be empty.")
+        return RedirectResponse("/", status_code=303)
+    existing_names = {p.get("name") for p in raw.get("printers", [])}
+    if printer_name in existing_names:
+        _record(f"Printer name already exists: {printer_name!r}")
+        return RedirectResponse("/", status_code=303)
+    from printer_app.config import _default_printer_raw
+
+    raw["printers"].append(_default_printer_raw(printer_name))
+    raw["printers"][-1]["profile"] = profile
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Printer was not added: {exc}")
+    else:
+        _record(f"Added printer {printer_name!r}.")
+    return RedirectResponse(f"/printer/{printer_name}", status_code=303)
+
+
+@app.post("/printers/{name}/delete")
+def delete_printer(
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    if len(config.printers) <= 1:
+        _record("Cannot delete the last printer.")
+        return RedirectResponse("/", status_code=303)
+    raw = config_to_raw(config)
+    raw["printers"] = [p for p in raw["printers"] if p.get("name") != name]
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Printer was not deleted: {exc}")
+    else:
+        _record(f"Deleted printer {name!r}.")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/printer/{name}", response_class=HTMLResponse)
+def printer_detail(
+    request: Request,
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+) -> HTMLResponse:
+    config = load_config(config_path_from_env())
+    printer = _resolve_printer(config, name)
+    preview = _preview_for_first_worker(config, config.receipt_template, printer)
+    selected_profile = get_profile(printer.profile)
+    return templates.TemplateResponse(
+        request,
+        "printer.html",
+        {
+            "config": config,
+            "printer": printer,
+            "profiles": load_profiles(),
+            "selected_profile": selected_profile,
+            "profile_data": [_profile_data(p) for p in load_profiles()],
+            "all_code_pages": sorted(escpos.CODE_PAGES),
+            "preview": preview,
+            "preview_worker": _first_enabled_worker(config, allow_disabled=True),
+            "results": list(reversed(RECENT_RESULTS[-8:])),
+        },
+    )
+
+
+@app.post("/printer/{name}/settings")
+def save_printer_settings(
+    name: str,
     _: Annotated[None, Depends(require_auth)],
     host: Annotated[str, Form()],
     port: Annotated[int, Form()],
@@ -167,43 +269,148 @@ def save_settings(
     code_page: Annotated[str, Form()],
     print_density: Annotated[int, Form()],
     print_speed: Annotated[int, Form()],
-    print_schedule_cron: Annotated[str, Form()] = "",
-    timezone: Annotated[str, Form()] = "Asia/Dubai",
     image_logo: Annotated[str | None, Form()] = None,
     supports_print_density: Annotated[str | None, Form()] = None,
     supports_print_speed: Annotated[str | None, Form()] = None,
     cut: Annotated[str | None, Form()] = None,
 ) -> RedirectResponse:
     config = load_config(config_path_from_env())
+    _resolve_printer(config, name)
     raw = config_to_raw(config)
-    raw["printer"].update(
-        {
-            "host": host,
-            "port": port,
-            "timeout_seconds": timeout_seconds,
-            "paper_columns": paper_columns,
-            "profile": profile,
-            "code_page": code_page,
-            "image_logo": image_logo == "on",
-            "supports_print_density": supports_print_density == "on",
-            "supports_print_speed": supports_print_speed == "on",
-            "print_density": print_density,
-            "print_speed": print_speed,
-            "cut": cut == "on",
-        }
-    )
-    raw["print_schedule"] = {
-        **(raw.get("print_schedule") or {}),
-        "cron": print_schedule_cron.strip(),
-    }
-    raw["timezone"] = timezone.strip() or "Asia/Dubai"
+    for entry in raw["printers"]:
+        if entry.get("name") == name:
+            entry.update(
+                {
+                    "host": host,
+                    "port": port,
+                    "timeout_seconds": timeout_seconds,
+                    "paper_columns": paper_columns,
+                    "profile": profile,
+                    "code_page": code_page,
+                    "image_logo": image_logo == "on",
+                    "supports_print_density": supports_print_density == "on",
+                    "supports_print_speed": supports_print_speed == "on",
+                    "print_density": print_density,
+                    "print_speed": print_speed,
+                    "cut": cut == "on",
+                }
+            )
+            break
     try:
         write_raw_config(config_path_from_env(), raw)
     except ValueError as exc:
         _record(f"Printer settings were not saved: {exc}")
     else:
-        _record("Saved printer settings.")
-    return RedirectResponse("/", status_code=303)
+        _record(f"Saved settings for printer {name!r}.")
+    return RedirectResponse(f"/printer/{name}", status_code=303)
+
+
+@app.post("/printer/{name}/dry-run")
+def printer_dry_run(
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+) -> Response:
+    config = load_config(config_path_from_env())
+    printer = _resolve_printer(config, name)
+    worker = _first_enabled_worker(config)
+    now = datetime.now(ZoneInfo(config.timezone))
+    batch = build_task_source(config).fetch_task_batch(worker, now=now)
+    payload = render_receipt(batch, printer, now, config.receipt_template)
+    _record(f"Rendered {len(payload)} receipt bytes for {name!r} without printing.")
+    return Response(payload, media_type="application/octet-stream")
+
+
+@app.post("/printer/{name}/print-test")
+def printer_print_test(
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    printer = _resolve_printer(config, name)
+    try:
+        result = _print_worker_receipts(
+            config, [_first_enabled_worker(config).name], printer
+        )
+    except Exception as exc:
+        _record(f"Print test failed for {name!r}: {exc}")
+    else:
+        _record(
+            f"Printed {result['bytes']} bytes "
+            f"to {printer.host}:{printer.port}."
+        )
+    return RedirectResponse(f"/printer/{name}", status_code=303)
+
+
+@app.post("/printer/{name}/black-test")
+def printer_black_test(
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+    density: Annotated[int, Form()],
+    speed: Annotated[int, Form()],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    printer = _resolve_printer(config, name)
+    printer = replace(printer, print_density=density, print_speed=speed)
+    payload = render_black_test(printer)
+    try:
+        send_to_network_printer(payload, printer)
+    except Exception as exc:
+        _record(f"Black test failed for {name!r}: {exc}")
+    else:
+        _record(f"Printed black test on {name!r} with density={density} speed={speed}.")
+    return RedirectResponse(f"/printer/{name}", status_code=303)
+
+
+@app.post("/printer/{name}/font-test")
+def printer_font_test(
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    printer = _resolve_printer(config, name)
+    payload = render_font_test(printer)
+    try:
+        send_to_network_printer(payload, printer)
+    except Exception as exc:
+        _record(f"Font test failed for {name!r}: {exc}")
+    else:
+        _record(
+            f"Printed font test to {printer.host}:{printer.port} "
+            f"({name!r}) with {printer.code_page}."
+        )
+    return RedirectResponse(f"/printer/{name}", status_code=303)
+
+
+@app.post("/printer/{name}/calibration/wizard")
+def printer_calibration_wizard(
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+    phase: Annotated[str, Form()],
+    density: Annotated[int, Form()],
+    speed: Annotated[int, Form()],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    printer = _resolve_printer(config, name)
+    try:
+        settings = _calibration_settings(phase, density, speed)
+    except ValueError as exc:
+        _record(f"Calibration wizard failed for {name!r}: {exc}")
+        return RedirectResponse(f"/printer/{name}", status_code=303)
+
+    printer = replace(printer, cut=True)
+    payload = render_calibration_sweep(
+        printer,
+        tuple(settings),
+        title=_calibration_title(phase),
+    )
+    try:
+        send_to_network_printer(payload, printer)
+    except Exception as exc:
+        _record(f"Calibration wizard failed for {name!r}: {exc}")
+    else:
+        combos = ", ".join(f"d={d}/s={s}" for d, s in settings)
+        _record(f"Printed calibration strip on {name!r} ({combos}); cut at end.")
+    return RedirectResponse(f"/printer/{name}", status_code=303)
 
 
 @app.post("/crewday")
@@ -268,6 +475,7 @@ async def save_workers(
     worker_crewday_user_id = [
         str(value) for value in form.getlist("worker_crewday_user_id")
     ]
+    worker_printer = [str(value) for value in form.getlist("worker_printer")]
     raw_workers: list[dict[str, object]] = []
     enabled = {
         int(value)
@@ -278,18 +486,20 @@ async def save_workers(
         len(worker_name),
         len(worker_schedule),
         len(worker_crewday_user_id),
+        len(worker_printer),
     )
     for index in range(row_count):
-        name = worker_name[index].strip()
+        w_name = worker_name[index].strip()
         crewday_user_id = worker_crewday_user_id[index].strip()
-        if not name or not crewday_user_id:
+        if not w_name or not crewday_user_id:
             continue
         raw_workers.append(
             {
-                "name": name,
+                "name": w_name,
                 "schedule": worker_schedule[index].strip(),
                 "crewday_user_id": crewday_user_id,
                 "enabled": index in enabled,
+                "printer": worker_printer[index].strip(),
             }
         )
 
@@ -306,32 +516,6 @@ async def save_workers(
         _record(f"Worker settings were not saved: {exc}")
     else:
         _record(f"Saved {len(raw_workers)} worker configuration row(s).")
-    return RedirectResponse("/", status_code=303)
-
-
-@app.post("/dry-run")
-def dry_run(_: Annotated[None, Depends(require_auth)]) -> Response:
-    config = load_config(config_path_from_env())
-    worker = _first_enabled_worker(config)
-    now = datetime.now(ZoneInfo(config.timezone))
-    batch = build_task_source(config).fetch_task_batch(worker, now=now)
-    payload = render_receipt(batch, config.printer, now, config.receipt_template)
-    _record(f"Rendered {len(payload)} receipt bytes without printing.")
-    return Response(payload, media_type="application/octet-stream")
-
-
-@app.post("/print-test")
-def print_test(_: Annotated[None, Depends(require_auth)]) -> RedirectResponse:
-    config = load_config(config_path_from_env())
-    try:
-        result = _print_worker_receipts(config, [_first_enabled_worker(config).name])
-    except Exception as exc:
-        _record(f"Print failed: {exc}")
-    else:
-        _record(
-            f"Printed {result['bytes']} bytes "
-            f"to {config.printer.host}:{config.printer.port}."
-        )
     return RedirectResponse("/", status_code=303)
 
 
@@ -366,7 +550,8 @@ def template_preview(
 ) -> dict[str, object]:
     config = load_config(config_path_from_env())
     template = _payload_to_template(payload)
-    preview = _preview_for_first_worker(config, template)
+    printer = config.first_printer()
+    preview = _preview_for_first_worker(config, template, printer)
     return preview
 
 
@@ -395,73 +580,10 @@ def template_default(
     return _template_to_payload(default_receipt_template())
 
 
-@app.post("/black-test")
-def black_test(
-    _: Annotated[None, Depends(require_auth)],
-    density: Annotated[int, Form()],
-    speed: Annotated[int, Form()],
-) -> RedirectResponse:
-    config = load_config(config_path_from_env())
-    printer = replace(config.printer, print_density=density, print_speed=speed)
-    payload = render_black_test(printer)
-    try:
-        send_to_network_printer(payload, printer)
-    except Exception as exc:
-        _record(f"Black test failed: {exc}")
-    else:
-        _record(f"Printed black test with density={density} speed={speed}.")
-    return RedirectResponse("/", status_code=303)
-
-
-@app.post("/font-test")
-def font_test(_: Annotated[None, Depends(require_auth)]) -> RedirectResponse:
-    config = load_config(config_path_from_env())
-    payload = render_font_test(config.printer)
-    try:
-        send_to_network_printer(payload, config.printer)
-    except Exception as exc:
-        _record(f"Font test failed: {exc}")
-    else:
-        _record(
-            f"Printed font test to {config.printer.host}:{config.printer.port} "
-            f"with {config.printer.code_page}."
-        )
-    return RedirectResponse("/", status_code=303)
-
-
-@app.post("/calibration/wizard")
-def calibration_wizard(
-    _: Annotated[None, Depends(require_auth)],
-    phase: Annotated[str, Form()],
-    density: Annotated[int, Form()],
-    speed: Annotated[int, Form()],
-) -> RedirectResponse:
-    config = load_config(config_path_from_env())
-    try:
-        settings = _calibration_settings(phase, density, speed)
-    except ValueError as exc:
-        _record(f"Calibration wizard failed: {exc}")
-        return RedirectResponse("/", status_code=303)
-
-    printer = replace(config.printer, cut=True)
-    payload = render_calibration_sweep(
-        printer,
-        tuple(settings),
-        title=_calibration_title(phase),
-    )
-    try:
-        send_to_network_printer(payload, printer)
-    except Exception as exc:
-        _record(f"Calibration wizard failed: {exc}")
-    else:
-        combos = ", ".join(f"d={d}/s={s}" for d, s in settings)
-        _record(f"Printed compact calibration strip ({combos}); cut at end.")
-    return RedirectResponse("/", status_code=303)
-
-
 def _preview_for_first_worker(
     config: AppConfig,
     template: ReceiptTemplateConfig,
+    printer: PrinterConfig,
 ) -> dict[str, str | int]:
     worker = _first_enabled_worker(config, allow_disabled=True)
     now = datetime.now(ZoneInfo(config.timezone))
@@ -476,7 +598,7 @@ def _preview_for_first_worker(
         )
     preview = render_receipt_preview(
         batch,
-        config.printer,
+        printer,
         now,
         template,
     )
@@ -596,32 +718,62 @@ def _scheduled_worker_names(config: AppConfig, now: datetime) -> list[str]:
 def _print_worker_receipts(
     config: AppConfig,
     worker_names: list[str] | None = None,
+    target_printer: PrinterConfig | None = None,
 ) -> dict[str, object]:
     workers = _select_workers(config, worker_names)
     task_source = build_task_source(config)
-    printer = replace(config.printer, cut=True)
-    payload = bytearray()
-    for worker in workers:
-        now = datetime.now(ZoneInfo(config.timezone))
-        batch = task_source.fetch_task_batch(worker, now=now)
-        payload += render_receipt(batch, printer, now, config.receipt_template)
-    if not payload:
+    total_bytes = 0
+    printed_workers: list[str] = []
+
+    workers_by_printer = _group_workers_by_printer(config, workers, target_printer)
+    for printer, printer_workers in workers_by_printer:
+        printer_config = replace(printer, cut=True)
+        payload = bytearray()
+        for worker in printer_workers:
+            now = datetime.now(ZoneInfo(config.timezone))
+            batch = task_source.fetch_task_batch(worker, now=now)
+            payload += render_receipt(
+                batch, printer_config, now, config.receipt_template
+            )
+        if payload:
+            send_to_network_printer(bytes(payload), printer_config)
+            total_bytes += len(payload)
+            printed_workers.extend(w.name for w in printer_workers)
+
+    if not printed_workers:
         raise ValueError("no workers are enabled in config")
 
-    send_to_network_printer(bytes(payload), printer)
     return {
         "status": "printed",
-        "count": len(workers),
-        "workers": [worker.name for worker in workers],
-        "bytes": len(payload),
+        "count": len(printed_workers),
+        "workers": printed_workers,
+        "bytes": total_bytes,
         "cut": True,
     }
+
+
+def _group_workers_by_printer(
+    config: AppConfig,
+    workers: list[WorkerConfig],
+    target_printer: PrinterConfig | None = None,
+) -> list[tuple[PrinterConfig, list[WorkerConfig]]]:
+    if target_printer is not None:
+        return [(target_printer, workers)]
+    printer_map: dict[str, list[WorkerConfig]] = {}
+    for worker in workers:
+        printer = config.printer_for_worker(worker)
+        printer_map.setdefault(printer.name, []).append(worker)
+    result: list[tuple[PrinterConfig, list[WorkerConfig]]] = []
+    for printer in config.printers:
+        if printer.name in printer_map:
+            result.append((printer, printer_map[printer.name]))
+    return result
 
 
 def _select_workers(
     config: AppConfig,
     worker_names: list[str] | None,
-):
+) -> list[WorkerConfig]:
     if worker_names is None:
         return [worker for worker in config.workers if worker.enabled]
 
@@ -636,7 +788,9 @@ def _select_workers(
     return selected
 
 
-def _first_enabled_worker(config: AppConfig, *, allow_disabled: bool = False):
+def _first_enabled_worker(
+    config: AppConfig, *, allow_disabled: bool = False
+) -> WorkerConfig:
     for worker in config.workers:
         if worker.enabled:
             return worker
@@ -683,6 +837,7 @@ def _load_worker_roster(
                 "name": crewday_worker.name,
                 "enabled": configured_worker.enabled if configured_worker else False,
                 "schedule": configured_worker.schedule if configured_worker else "",
+                "printer": configured_worker.printer if configured_worker else "",
             }
         )
 
@@ -695,6 +850,7 @@ def _load_worker_roster(
                 "name": worker.name,
                 "enabled": worker.enabled,
                 "schedule": worker.schedule,
+                "printer": worker.printer,
             }
         )
     return rows, error

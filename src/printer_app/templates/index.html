@@ -1,622 +1,308 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>crew.day · printer console</title>
-    <meta name="theme-color" content="#FAF7F2">
+{% extends "base.html" %}
+{% from "macros.html" import panel_head, activity_log %}
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+{% block topbar_heading %}
+  <h1 class="page-title">Printer <em>console</em></h1>
+{% endblock %}
 
-    <link rel="stylesheet" href="/static/ui.css">
-    <script>
-      (function () {
-        try {
-          var stored = localStorage.getItem("printer-theme");
-          if (stored === "light" || stored === "dark") {
-            document.documentElement.setAttribute("data-theme", stored);
-          }
-        } catch (e) { /* private mode — ignore */ }
-      })();
-    </script>
-  </head>
-  <body>
-    <div class="aura" aria-hidden="true"></div>
-    <div class="grain" aria-hidden="true"></div>
+{% block content %}
+<div class="grid">
+  <div class="grid__col">
+    <section class="panel">
+      {% call panel_head("Printers", "Configured printers") %}
+      {% endcall %}
+      <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Each printer can be calibrated and tested on its own detail page.</p>
 
-    <main class="shell">
-      <header class="page-topbar">
-        <div class="page-topbar__heading">
-          <h1 class="page-title">Printer <em>console</em></h1>
-          <p class="page-sub">
-            <span class="chip chip--moss">
-              <span class="dot dot--moss"></span>
-              {{ config.printer.profile }}
-            </span>
-            <code>{{ config.printer.host }}:{{ config.printer.port }}</code>
-            <span>· {{ config.printer.paper_columns }} columns</span>
-          </p>
-        </div>
-        <div class="page-topbar__trailing">
-          <button
-            type="button"
-            class="icon-btn"
-            id="theme-toggle"
-            aria-label="Toggle light/dark theme"
-            title="Toggle theme">
-            <svg class="icon-btn__sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="4"></circle>
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
-            </svg>
-            <svg class="icon-btn__moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"></path>
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <div class="grid">
-        <div class="grid__col">
-          <form class="panel" method="post" action="/settings">
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Settings</span>
-                <h2 class="panel__title">Printer connection</h2>
-                <p class="panel__sub">Network address and ESC/POS profile. Saved to the bind-mounted YAML config.</p>
-              </div>
-            </div>
-
-            <div class="form">
-              <div class="form__row">
-                <label class="field">
-                  <span class="field__label">Host</span>
-                  <input class="input" name="host" value="{{ config.printer.host }}" required>
-                </label>
-                <label class="field">
-                  <span class="field__label">Port</span>
-                  <input class="input" name="port" type="number" value="{{ config.printer.port }}" required>
-                </label>
-                <label class="field">
-                  <span class="field__label">Timeout</span>
-                  <input class="input" name="timeout_seconds" type="number" step="0.1" value="{{ config.printer.timeout_seconds }}" required>
-                  <span class="field__hint">seconds</span>
-                </label>
-              </div>
-
-              <h3 class="section-title">Paper &amp; ESC/POS</h3>
-              <div class="form__row">
-                <label class="field">
-                  <span class="field__label">Profile</span>
-                  <select class="input" id="profile" name="profile" required>
-                    {% for profile in profiles %}
-                      <option value="{{ profile.id }}" {% if profile.id == config.printer.profile %}selected{% endif %}>
-                        {{ profile.name }}
-                      </option>
-                    {% endfor %}
-                  </select>
-                </label>
-                <label class="field">
-                  <span class="field__label">Columns</span>
-                  <input class="input" id="paper-columns" name="paper_columns" type="number" value="{{ config.printer.paper_columns }}" required>
-                  <span class="field__hint" id="paper-width">
-                    {% if selected_profile %}{{ selected_profile.paper_width }}{% else %}paper width{% endif %}
+      {% if config.printers %}
+        <div class="printer-list">
+          {% for printer in config.printers %}
+            <a href="/printer/{{ printer.name }}" class="printer-card">
+              <div class="printer-card__info">
+                <strong class="printer-card__name">{{ printer.name }}</strong>
+                <span class="printer-card__meta">
+                  <span class="chip chip--moss chip--sm">
+                    <span class="dot dot--moss"></span>
+                    {{ printer.profile }}
                   </span>
-                </label>
-                <label class="field">
-                  <span class="field__label">Code page</span>
-                  <select class="input" id="code-page" name="code_page" required>
-                    {% for code_page in all_code_pages %}
-                      <option value="{{ code_page }}" {% if code_page == config.printer.code_page %}selected{% endif %}>{{ code_page }}</option>
-                    {% endfor %}
-                  </select>
-                </label>
-                <label class="field">
-                  <span class="field__label">Density</span>
-                  <input class="input" id="print-density" name="print_density" type="number" min="0" max="255" value="{{ config.printer.print_density }}" required>
-                  <span class="field__hint">0–255</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">Speed</span>
-                  <input class="input" id="print-speed" name="print_speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}" required>
-                  <span class="field__hint">0–17</span>
-                </label>
-              </div>
-
-              <div class="profile-card" aria-live="polite">
-                <span class="profile-card__title" id="profile-name">
-                  {% if selected_profile %}{{ selected_profile.name }}{% else %}Custom profile{% endif %}
+                  <code>{{ printer.host }}:{{ printer.port }}</code>
+                  <span>{{ printer.paper_columns }} cols</span>
                 </span>
-                <span class="profile-card__meta" id="cut-behavior">
-                  {% if selected_profile %}{{ selected_profile.cut_behavior }}{% endif %}
-                </span>
-                <div class="profile-card__flags">
-                  <span id="image-logo-flag">Image/logo {% if config.printer.image_logo %}supported{% else %}off{% endif %}</span>
-                  <span id="density-flag">Density {% if config.printer.supports_print_density %}supported{% else %}off{% endif %}</span>
-                  <span id="speed-flag">Speed {% if config.printer.supports_print_speed %}supported{% else %}off{% endif %}</span>
-                </div>
               </div>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty">
+          <span class="empty__title">No printers configured</span>
+          <span class="empty__sub">Add a printer below to get started.</span>
+        </div>
+      {% endif %}
 
-              <div class="check-grid">
-                <label class="check">
-                  <input id="cut" name="cut" type="checkbox" {% if config.printer.cut %}checked{% endif %}>
-                  <span>Cut paper after each receipt</span>
-                </label>
-                <label class="check">
-                  <input id="image-logo" name="image_logo" type="checkbox" {% if config.printer.image_logo %}checked{% endif %}>
-                  <span>Print image/logo header</span>
-                </label>
-                <label class="check">
-                  <input id="supports-density" name="supports_print_density" type="checkbox" {% if config.printer.supports_print_density %}checked{% endif %}>
-                  <span>Send density command</span>
-                </label>
-                <label class="check">
-                  <input id="supports-speed" name="supports_print_speed" type="checkbox" {% if config.printer.supports_print_speed %}checked{% endif %}>
-                  <span>Send speed command</span>
-                </label>
-              </div>
+      <hr class="panel__divider">
 
-              <h3 class="section-title">Automatic print</h3>
-              <div class="form__row">
-                <label class="field">
-                  <span class="field__label">Cron schedule</span>
-                  <input
-                    class="input input--mono"
-                    id="print-schedule-cron"
-                    name="print_schedule_cron"
-                    value="{{ config.print_schedule.cron }}"
-                    placeholder="Leave empty to disable">
-                  <span class="field__hint">Five-field cron. Empty means no automatic print.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">Printer timezone</span>
-                  <input class="input input--mono" name="timezone" value="{{ config.timezone }}" required>
-                  <span class="field__hint">Used for all print windows and timestamps.</span>
-                </label>
-              </div>
-              <details class="helper">
-                <summary>Examples</summary>
-                <div class="example-grid" aria-label="Cron examples">
-                  <button type="button" class="example" data-cron="">Off</button>
-                  <button type="button" class="example" data-cron="0 8 * * *">Every day at 08:00</button>
-                  <button type="button" class="example" data-cron="0 8 * * 1-5">Weekdays at 08:00</button>
-                  <button type="button" class="example" data-cron="0 7,13 * * *">07:00 and 13:00</button>
-                  <button type="button" class="example" data-cron="*/30 8-18 * * *">Every 30 min, 08-18</button>
-                </div>
-              </details>
-            </div>
+      <details class="helper">
+        <summary>Add printer</summary>
+        <form method="post" action="/printers/add" class="form">
+          <div class="form__row">
+            <label class="field">
+              <span class="field__label">Name</span>
+              <input class="input" name="name" placeholder="e.g. Kitchen printer" required>
+              <span class="field__hint">Unique name for this printer.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Profile</span>
+              <select class="input" name="profile" required>
+                {% for profile in profiles %}
+                  <option value="{{ profile.id }}">{{ profile.name }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <div class="btn-group btn-group--end">
+            <button type="submit" class="btn btn--moss">Add printer</button>
+          </div>
+        </form>
+      </details>
+    </section>
 
-            <div class="btn-group btn-group--end">
-              <button type="submit" class="btn btn--moss">Save settings</button>
-            </div>
-          </form>
+    <form class="panel" method="post" action="/crewday">
+      {% call panel_head("Crewday", "Workspace API") %}
+        {% if secret_key_configured %}
+          <span class="chip chip--moss"><span class="dot dot--moss"></span>encrypted</span>
+        {% else %}
+          <span class="chip chip--sand"><span class="dot dot--sand"></span>key missing</span>
+        {% endif %}
+      {% endcall %}
+      <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Crewday v1 uses workspace-scoped routes under <code>/w/&lt;slug&gt;/api/v1</code> and bearer API tokens.</p>
 
-          <form class="panel" method="post" action="/crewday">
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Crewday</span>
-                <h2 class="panel__title">Workspace API</h2>
-                <p class="panel__sub">Crewday v1 uses workspace-scoped routes under <code>/w/&lt;slug&gt;/api/v1</code> and bearer API tokens.</p>
-              </div>
-              {% if secret_key_configured %}
-                <span class="chip chip--moss"><span class="dot dot--moss"></span>encrypted</span>
-              {% else %}
-                <span class="chip chip--sand"><span class="dot dot--sand"></span>key missing</span>
-              {% endif %}
-            </div>
+      <div class="form">
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Source</span>
+            <select class="input" name="source" required>
+              <option value="mock" {% if config.crewday.source == "mock" %}selected{% endif %}>Mock fallback</option>
+              <option value="crewday_http" {% if config.crewday.source == "crewday_http" %}selected{% endif %}>Crewday HTTP API</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field__label">Base URL</span>
+            <input class="input input--mono" name="base_url" value="{{ config.crewday.base_url }}" placeholder="http://crewday:8000" required>
+            <span class="field__hint">Host only, without /w/&lt;slug&gt;/api/v1.</span>
+          </label>
+          <label class="field">
+            <span class="field__label">Workspace slug</span>
+            <input class="input input--mono" name="workspace_slug" value="{{ config.crewday.workspace_slug or '' }}" placeholder="myhome">
+            <span class="field__hint">The slug from Crewday workspace URLs.</span>
+          </label>
+        </div>
+        <label class="field">
+          <span class="field__label">API token</span>
+          <input class="input input--mono" name="api_token" type="password" autocomplete="new-password" placeholder="{% if config.crewday.api_token %}Stored encrypted; leave blank to keep{% else %}mip_...{% endif %}">
+          <span class="field__hint">Create a workspace token in Crewday with task read access. Stored encrypted when PRINTER_CONFIG_SECRET_KEY is set.</span>
+        </label>
+      </div>
 
-            <div class="form">
-              <div class="form__row">
-                <label class="field">
-                  <span class="field__label">Source</span>
-                  <select class="input" name="source" required>
-                    <option value="mock" {% if config.crewday.source == "mock" %}selected{% endif %}>Mock fallback</option>
-                    <option value="crewday_http" {% if config.crewday.source == "crewday_http" %}selected{% endif %}>Crewday HTTP API</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span class="field__label">Base URL</span>
-                  <input class="input input--mono" name="base_url" value="{{ config.crewday.base_url }}" placeholder="http://crewday:8000" required>
-                  <span class="field__hint">Host only, without /w/&lt;slug&gt;/api/v1.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">Workspace slug</span>
-                  <input class="input input--mono" name="workspace_slug" value="{{ config.crewday.workspace_slug or '' }}" placeholder="myhome">
-                  <span class="field__hint">The slug from Crewday workspace URLs.</span>
-                </label>
-              </div>
+      <div class="btn-group btn-group--end">
+        <button type="submit" class="btn btn--moss">Save Crewday</button>
+      </div>
+    </form>
+
+    <form class="panel" method="post" action="/workers">
+      {% call panel_head("Workers", "Print roster") %}
+      {% endcall %}
+      <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Enable Crewday workers and choose which printer outputs their receipt.</p>
+
+      {% if crewday_worker_error %}
+        <p class="field__hint">Crewday roster could not be loaded: {{ crewday_worker_error }}. Showing saved config rows.</p>
+      {% endif %}
+      <div class="worker-list">
+        {% for worker in crewday_workers %}
+          {% set row = loop.index0 %}
+          <section class="worker-card">
+            <label class="check worker-card__enabled">
+              <input name="worker_enabled" type="checkbox" value="{{ row }}" {% if worker.enabled %}checked{% endif %}>
+              <span>Enabled</span>
+            </label>
+            <div class="form__row">
               <label class="field">
-                <span class="field__label">API token</span>
-                <input class="input input--mono" name="api_token" type="password" autocomplete="new-password" placeholder="{% if config.crewday.api_token %}Stored encrypted; leave blank to keep{% else %}mip_...{% endif %}">
-                <span class="field__hint">Create a workspace token in Crewday with task read access. Stored encrypted when PRINTER_CONFIG_SECRET_KEY is set.</span>
+                <span class="field__label">Name</span>
+                <input class="input" name="worker_name" value="{{ worker.name }}" readonly>
+              </label>
+              <label class="field">
+                <span class="field__label">Receipt schedule override</span>
+                <input class="input input--mono" name="worker_schedule" value="{{ worker.schedule }}" placeholder="Optional">
+              </label>
+              <label class="field">
+                <span class="field__label">Printer</span>
+                <select class="input" name="worker_printer">
+                  {% for printer in config.printers %}
+                    <option value="{{ printer.name }}" {% if worker.printer == printer.name or (not worker.printer and loop.index == 1) %}selected{% endif %}>
+                      {{ printer.name }}
+                    </option>
+                  {% endfor %}
+                </select>
               </label>
             </div>
-
-            <div class="btn-group btn-group--end">
-              <button type="submit" class="btn btn--moss">Save Crewday</button>
-            </div>
-          </form>
-
-          <form class="panel" method="post" action="/workers">
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Workers</span>
-                <h2 class="panel__title">Print roster</h2>
-                <p class="panel__sub">Enable Crewday workers for this printer.</p>
-              </div>
-            </div>
-
-            {% if crewday_worker_error %}
-              <p class="field__hint">Crewday roster could not be loaded: {{ crewday_worker_error }}. Showing saved config rows.</p>
-            {% endif %}
-            <div class="worker-list">
-              {% for worker in crewday_workers %}
-                {% set row = loop.index0 %}
-                <section class="worker-card">
-                  <label class="check worker-card__enabled">
-                    <input name="worker_enabled" type="checkbox" value="{{ row }}" {% if worker.enabled %}checked{% endif %}>
-                    <span>Enabled</span>
-                  </label>
-                  <div class="form__row">
-                    <label class="field">
-                      <span class="field__label">Name</span>
-                      <input class="input" name="worker_name" value="{{ worker.name }}" readonly>
-                    </label>
-                    <label class="field">
-                      <span class="field__label">Receipt schedule override</span>
-                      <input class="input input--mono" name="worker_schedule" value="{{ worker.schedule }}" placeholder="Optional">
-                    </label>
-                  </div>
-                  <input type="hidden" name="worker_crewday_user_id" value="{{ worker.user_id }}">
-                </section>
-              {% endfor %}
-            </div>
-
-            <div class="btn-group btn-group--end">
-              <button type="submit" class="btn btn--moss">Save workers</button>
-            </div>
-          </form>
-
-          <form class="panel" method="post" action="/access">
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Access</span>
-                <h2 class="panel__title">Console login</h2>
-                <p class="panel__sub">Env variables <code>PRINTER_UI_USERNAME</code> and <code>PRINTER_UI_PASSWORD</code> take priority over this config.</p>
-              </div>
-            </div>
-
-            <div class="form">
-              <div class="form__row">
-                <label class="field">
-                  <span class="field__label">Username</span>
-                  <input class="input" name="ui_username" value="{{ config.ui.username }}" required>
-                  <span class="field__hint">Stored encrypted in YAML when a config key is set.</span>
-                </label>
-                <label class="field">
-                  <span class="field__label">New password</span>
-                  <input class="input" name="ui_password" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password">
-                  <span class="field__hint">Saved as a hash, then encrypted in config.</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="btn-group btn-group--end">
-              <button type="submit" class="btn btn--moss">Save login</button>
-            </div>
-          </form>
-
-          <section class="panel">
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Calibration</span>
-                <h2 class="panel__title">Density &amp; speed wizard</h2>
-                <p class="panel__sub">Runs the documented sweep as compact strips on the configured printer. Each step cuts only after the strip finishes.</p>
-              </div>
-            </div>
-
-            <form method="post" action="/calibration/wizard" class="wizard">
-              <div class="form__row">
-                <label class="field">
-                  <span class="field__label">Best density</span>
-                  <input class="input" name="density" type="number" min="0" max="255" value="{{ config.printer.print_density }}">
-                </label>
-                <label class="field">
-                  <span class="field__label">Best speed</span>
-                  <input class="input" name="speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}">
-                </label>
-              </div>
-              <div class="wizard__steps" role="group" aria-label="Calibration wizard steps">
-                <button type="submit" name="phase" value="quick" class="wizard-step">
-                  <span class="wizard-step__num">1</span>
-                  <span class="wizard-step__body">
-                    <strong>Quick sweep</strong>
-                    <small>4/12, 6/9, 8/6, 10/4</small>
-                  </span>
-                </button>
-                <button type="submit" name="phase" value="refine_density" class="wizard-step">
-                  <span class="wizard-step__num">2</span>
-                  <span class="wizard-step__body">
-                    <strong>Refine density</strong>
-                    <small>Uses the speed above</small>
-                  </span>
-                </button>
-                <button type="submit" name="phase" value="refine_speed" class="wizard-step">
-                  <span class="wizard-step__num">3</span>
-                  <span class="wizard-step__body">
-                    <strong>Refine speed</strong>
-                    <small>Uses the density above</small>
-                  </span>
-                </button>
-              </div>
-              <p class="field__hint">After choosing final values, update Density and Speed in Printer connection, then save settings.</p>
-            </form>
-
-            <hr class="panel__divider">
-
-            <form method="post" action="/black-test" class="form">
-              <div class="form__row">
-                <label class="field">
-                  <span class="field__label">Density</span>
-                  <input class="input" name="density" type="number" min="0" max="255" value="{{ config.printer.print_density }}">
-                </label>
-                <label class="field">
-                  <span class="field__label">Speed</span>
-                  <input class="input" name="speed" type="number" min="0" max="17" value="{{ config.printer.print_speed }}">
-                </label>
-              </div>
-              <div class="btn-group btn-group--end">
-                <button type="submit" class="btn">Print black test</button>
-              </div>
-            </form>
-
-            <hr class="panel__divider">
-
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Feature sample</span>
-                <h2 class="panel__title">Fonts &amp; emphasis</h2>
-                <p class="panel__sub">
-                  Prints font A/B, bold, underline, double width/height, alignment,
-                  reverse text, and symbols on the configured printer.
-                </p>
-              </div>
-            </div>
-            <form method="post" action="/font-test">
-              <div class="btn-group btn-group--end">
-                <button type="submit" class="btn">Print font test</button>
-              </div>
-            </form>
-
-            <hr class="panel__divider">
-
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Live test</span>
-                <h2 class="panel__title">First worker receipt</h2>
-                <p class="panel__sub">
-                  Prints the rendered task list for
-                  <strong>{{ preview_worker.name }}</strong>
-                  to the configured printer.
-                </p>
-              </div>
-            </div>
-            <form method="post" action="/print-test">
-              <div class="btn-group btn-group--end">
-                <button type="submit" class="btn btn--rust">Send to printer</button>
-              </div>
-            </form>
+            <input type="hidden" name="worker_crewday_user_id" value="{{ worker.user_id }}">
           </section>
-        </div>
+        {% endfor %}
+      </div>
 
-        <div class="grid__col">
-          <section class="panel panel--soft">
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Preview</span>
-                <h2 class="panel__title">{{ preview_worker.name }}'s receipt</h2>
-                <p class="panel__sub">Rendered from the dry-run ESC/POS bytes at {{ config.printer.paper_columns }} columns. No paper consumed.</p>
-              </div>
-              <span class="chip chip--sand"><span class="dot dot--sand"></span>dry run</span>
-            </div>
+      <div class="btn-group btn-group--end">
+        <button type="submit" class="btn btn--moss">Save workers</button>
+      </div>
+    </form>
 
-            <div
-              class="receipt"
-              style="--receipt-width-dots: {{ preview.width_dots }}px;"
-              role="img"
-              aria-label="Receipt preview">
-              <div class="receipt__paper">
-                <img
-                  class="receipt__image"
-                  src="{{ preview.src }}"
-                  width="{{ preview.width_dots }}"
-                  height="{{ preview.height_dots }}"
-                  alt="{{ preview_worker.name }} receipt preview">
-              </div>
-            </div>
+    <form class="panel" method="post" action="/access">
+      {% call panel_head("Access", "Console login") %}
+      {% endcall %}
+      <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Env variables <code>PRINTER_UI_USERNAME</code> and <code>PRINTER_UI_PASSWORD</code> take priority over this config.</p>
 
-            <form method="post" action="/dry-run">
-              <div class="btn-group btn-group--end">
-                <button type="submit" class="btn btn--ghost">Download bytes</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="panel composer" id="composer-panel">
-            <div class="panel__head composer__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Composer</span>
-                <h2 class="panel__title">Receipt <em>template</em></h2>
-              </div>
-              <div class="composer__head-actions">
-                <span class="chip chip--sand" id="composer-dirty-chip" hidden>
-                  <span class="dot dot--sand"></span><span id="composer-dirty"></span>
-                </span>
-              </div>
-            </div>
-
-            <div class="composer__grid">
-              <aside class="composer__rail composer__rail--palette" aria-label="Available block types">
-                <header class="composer__rail-head">
-                  <span class="composer__eyebrow">Typecase</span>
-                </header>
-                <ul class="palette" id="composer-palette" role="list"></ul>
-                <p class="composer__rail-foot">
-                  {% raw %}Text blocks accept Jinja:
-                  <code>{{ brand }}</code>,
-                  <code>{{ worker_name }}</code>,
-                  <code>{{ source_label }}</code>,
-                  <code>{{ task_count }}</code>,
-                  <code>{{ display_date }}</code>,
-                  <code>{{ display_datetime }}</code>,
-                  <code>{{ printed_at }}</code>,
-                  <code>{{ generated_at }}</code>.{% endraw %}
-                </p>
-              </aside>
-
-              <section class="composer__rail composer__rail--stage" aria-label="Receipt blocks in order">
-                <ol class="dropzone" id="composer-dropzone" role="list" aria-live="polite"></ol>
-              </section>
-            </div>
-
-            <div class="composer__bar">
-              <p class="composer__status" id="composer-status"></p>
-              <div class="btn-group btn-group--end">
-                <button type="button" class="btn btn--ghost btn--sm" id="composer-reset" title="Discard edits and load the bundled default">
-                  Reset to default
-                </button>
-                <button type="button" class="btn btn--ghost" id="composer-preview" title="Render the preview above using this layout, without saving">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                  </svg>
-                  Preview without saving
-                </button>
-                <button type="button" class="btn btn--moss" id="composer-save" title="Persist this layout to the YAML config">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                    <polyline points="7 3 7 8 15 8"></polyline>
-                  </svg>
-                  Save template
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="panel__head">
-              <div class="panel__head-stack">
-                <span class="panel__eyebrow">Activity</span>
-                <h2 class="panel__title">Recent commands</h2>
-                <p class="panel__sub">In-memory log of the last few actions performed from this UI.</p>
-              </div>
-            </div>
-
-            {% if results %}
-              <ul class="log">
-                {% for result in results %}
-                  {% set parts = result.split(' ', 1) %}
-                  {% set stamp = parts[0] %}
-                  {% set msg   = parts[1] if parts|length > 1 else '' %}
-                  {% set is_err = 'failed' in msg|lower or 'error' in msg|lower %}
-                  <li class="log__item {% if is_err %}log__item--err{% endif %}">
-                    <span class="log__time">{{ stamp }}</span>
-                    <span class="dot {% if is_err %}dot--rust{% else %}dot--moss{% endif %} log__dot"></span>
-                    <span class="log__msg">{{ msg }}</span>
-                  </li>
-                {% endfor %}
-              </ul>
-            {% else %}
-              <div class="empty">
-                <span class="empty__title">No commands yet</span>
-                <span class="empty__sub">Save settings, print a calibration sheet, or render a dry-run preview to see entries here.</span>
-              </div>
-            {% endif %}
-          </section>
+      <div class="form">
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Username</span>
+            <input class="input" name="ui_username" value="{{ config.ui.username }}" required>
+            <span class="field__hint">Stored encrypted in YAML when a config key is set.</span>
+          </label>
+          <label class="field">
+            <span class="field__label">New password</span>
+            <input class="input" name="ui_password" type="password" autocomplete="new-password" placeholder="Leave blank to keep current password">
+            <span class="field__hint">Saved as a hash, then encrypted in config.</span>
+          </label>
         </div>
       </div>
 
-      <footer class="colophon">
-        <span><strong>crew.day</strong> printer</span>
-      </footer>
-    </main>
+      <div class="btn-group btn-group--end">
+        <button type="submit" class="btn btn--moss">Save login</button>
+      </div>
+    </form>
 
-    <script type="application/json" id="composer-bootstrap">
-      {{ {"current": template_data, "default": default_template_data} | tojson }}
-    </script>
+    <form class="panel" method="post" action="/settings">
+      {% call panel_head("Schedule", "Automatic print") %}
+      {% endcall %}
+      <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Global cron schedule for all workers (unless overridden per worker).</p>
 
-    <script>
-      (function () {
-        var btn = document.getElementById("theme-toggle");
-        if (!btn) return;
-        btn.addEventListener("click", function () {
-          var current = document.documentElement.getAttribute("data-theme");
-          var next = current === "dark" ? "light" : "dark";
-          document.documentElement.setAttribute("data-theme", next);
-          try { localStorage.setItem("printer-theme", next); } catch (e) {}
-        });
-      })();
-      (function () {
-        var profiles = {{ profile_data | tojson }};
-        var allCodePages = {{ all_code_pages | tojson }};
-        var select = document.getElementById("profile");
-        if (!select) return;
+      <div class="form">
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Cron schedule</span>
+            <input
+              class="input input--mono"
+              id="print-schedule-cron"
+              name="print_schedule_cron"
+              value="{{ config.print_schedule.cron }}"
+              placeholder="Leave empty to disable">
+            <span class="field__hint">Five-field cron. Empty means no automatic print.</span>
+          </label>
+          <label class="field">
+            <span class="field__label">Printer timezone</span>
+            <input class="input input--mono" name="timezone" value="{{ config.timezone }}" required>
+            <span class="field__hint">Used for all print windows and timestamps.</span>
+          </label>
+        </div>
+        <details class="helper">
+          <summary>Examples</summary>
+          <div class="example-grid" aria-label="Cron examples">
+            <button type="button" class="example" data-cron="">Off</button>
+            <button type="button" class="example" data-cron="0 8 * * *">Every day at 08:00</button>
+            <button type="button" class="example" data-cron="0 8 * * 1-5">Weekdays at 08:00</button>
+            <button type="button" class="example" data-cron="0 7,13 * * *">07:00 and 13:00</button>
+            <button type="button" class="example" data-cron="*/30 8-18 * * *">Every 30 min, 08-18</button>
+          </div>
+        </details>
+      </div>
 
-        function setChecked(id, value) {
-          var el = document.getElementById(id);
-          if (el) el.checked = Boolean(value);
-        }
+      <div class="btn-group btn-group--end">
+        <button type="submit" class="btn btn--moss">Save schedule</button>
+      </div>
+    </form>
+  </div>
 
-        function setText(id, value) {
-          var el = document.getElementById(id);
-          if (el) el.textContent = value || "";
-        }
+  <div class="grid__col">
+    <section class="panel composer" id="composer-panel">
+      <div class="panel__head composer__head">
+        <div class="panel__head-stack">
+          <span class="panel__eyebrow">Composer</span>
+          <h2 class="panel__title">Receipt <em>template</em></h2>
+        </div>
+        <div class="composer__head-actions">
+          <span class="chip chip--sand" id="composer-dirty-chip" hidden>
+            <span class="dot dot--sand"></span><span id="composer-dirty"></span>
+          </span>
+        </div>
+      </div>
 
-        function applyProfile() {
-          var profile = profiles.find(function (item) { return item.id === select.value; });
-          var codePage = document.getElementById("code-page");
-          if (!profile || !codePage) return;
+      <div class="composer__grid">
+        <aside class="composer__rail composer__rail--palette" aria-label="Available block types">
+          <header class="composer__rail-head">
+            <span class="composer__eyebrow">Typecase</span>
+          </header>
+          <ul class="palette" id="composer-palette" role="list"></ul>
+          <p class="composer__rail-foot">
+            {% raw %}Text blocks accept Jinja:
+            <code>{{ brand }}</code>,
+            <code>{{ worker_name }}</code>,
+            <code>{{ source_label }}</code>,
+            <code>{{ task_count }}</code>,
+            <code>{{ display_date }}</code>,
+            <code>{{ display_datetime }}</code>,
+            <code>{{ printed_at }}</code>,
+            <code>{{ generated_at }}</code>.{% endraw %}
+          </p>
+        </aside>
 
-          document.getElementById("paper-columns").value = profile.paper_columns;
-          document.getElementById("print-density").value = profile.print_density;
-          document.getElementById("print-speed").value = profile.print_speed;
-          setChecked("cut", profile.cut);
-          setChecked("image-logo", profile.image_logo);
-          setChecked("supports-density", profile.supports_print_density);
-          setChecked("supports-speed", profile.supports_print_speed);
+        <section class="composer__rail composer__rail--stage" aria-label="Receipt blocks in order">
+          <ol class="dropzone" id="composer-dropzone" role="list" aria-live="polite"></ol>
+        </section>
+      </div>
 
-          codePage.replaceChildren();
-          allCodePages.forEach(function (value) {
-            var option = document.createElement("option");
-            option.value = value;
-            option.textContent = value;
-            option.selected = value === profile.code_pages[0];
-            codePage.appendChild(option);
-          });
+      <div class="composer__bar">
+        <p class="composer__status" id="composer-status"></p>
+        <div class="btn-group btn-group--end">
+          <button type="button" class="btn btn--ghost btn--sm" id="composer-reset" title="Discard edits and load the bundled default">
+            Reset to default
+          </button>
+          <button type="button" class="btn btn--ghost" id="composer-preview" title="Render the preview above using this layout, without saving">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            Preview without saving
+          </button>
+          <button type="button" class="btn btn--moss" id="composer-save" title="Persist this layout to the YAML config">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            Save template
+          </button>
+        </div>
+      </div>
+    </section>
 
-          setText("profile-name", profile.name);
-          setText("paper-width", profile.paper_width);
-          setText("cut-behavior", profile.cut_behavior);
-          setText("image-logo-flag", "Image/logo " + (profile.image_logo ? "supported" : "off"));
-          setText("density-flag", "Density " + (profile.supports_print_density ? "supported" : "off"));
-          setText("speed-flag", "Speed " + (profile.supports_print_speed ? "supported" : "off"));
-        }
+    {{ activity_log(results) }}
+  </div>
+</div>
+{% endblock %}
 
-        select.addEventListener("change", applyProfile);
-      })();
-      (function () {
-        var target = document.getElementById("print-schedule-cron");
-        if (!target) return;
-        document.querySelectorAll("[data-cron]").forEach(function (button) {
-          button.addEventListener("click", function () {
-            target.value = button.getAttribute("data-cron") || "";
-            target.focus();
-          });
-        });
-      })();
-    </script>
-    <script src="/static/template-editor.js" defer></script>
-  </body>
-</html>
+{% block extra_scripts %}
+<script type="application/json" id="composer-bootstrap">
+  {{ {"current": template_data, "default": default_template_data} | tojson }}
+</script>
+<script>
+  (function () {
+    var target = document.getElementById("print-schedule-cron");
+    if (!target) return;
+    document.querySelectorAll("[data-cron]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        target.value = button.getAttribute("data-cron") || "";
+        target.focus();
+      });
+    });
+  })();
+</script>
+<script src="/static/template-editor.js" defer></script>
+{% endblock %}

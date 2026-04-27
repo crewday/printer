@@ -77,22 +77,24 @@ receipt_template:
     underline: 0
     scale: 0.5
     trailing_blank: true
-printer:
-  type: network_escpos
-  profile: epson_tm_t20ii
-  host: 192.168.20.15
-  port: 9100
-  timeout_seconds: 5.0
-  paper_columns: 48
-  code_page: cp1252
-  image_logo: true
-  supports_print_density: true
-  supports_print_speed: true
-  print_density: 8
-  print_speed: 6
-  cut: true
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 192.168.20.15
+    port: 9100
+    timeout_seconds: 5.0
+    paper_columns: 48
+    code_page: cp1252
+    image_logo: true
+    supports_print_density: true
+    supports_print_speed: true
+    print_density: 8
+    print_speed: 6
+    cut: true
 workers:
 - name: Vincent
   schedule: ''
   crewday_user_id: null
   enabled: true
+  printer: Default

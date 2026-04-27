@@ -56,11 +56,29 @@ def config_path_from_env() -> Path:
     return Path(os.environ.get("PRINTER_CONFIG", str(DEFAULT_CONFIG_PATH)))
 
 
+def _default_printer_raw(name: str, host: str | None = None) -> dict[str, Any]:
+    profile = default_profile()
+    return {
+        "name": name,
+        "type": "network_escpos",
+        "profile": profile.id,
+        "host": host or os.environ.get("PRINTER_HOST", "192.168.20.15"),
+        "port": 9100,
+        "timeout_seconds": 5,
+        "paper_columns": profile.paper_columns,
+        "code_page": profile.code_pages[0],
+        "image_logo": profile.image_logo,
+        "supports_print_density": profile.supports_print_density,
+        "supports_print_speed": profile.supports_print_speed,
+        "print_density": profile.print_density,
+        "print_speed": profile.print_speed,
+        "cut": profile.cut,
+    }
+
+
 def default_config() -> dict[str, Any]:
     ui_username = os.environ.get("PRINTER_UI_USERNAME", "admin")
-    printer_host = os.environ.get("PRINTER_HOST", "192.168.20.15")
     crewday_token = os.environ.get("CREWDAY_API_TOKEN")
-    profile = default_profile()
     return {
         "ui": {
             "username": ui_username,
@@ -78,27 +96,14 @@ def default_config() -> dict[str, Any]:
         },
         "timezone": os.environ.get("PRINTER_TIMEZONE", "Asia/Dubai"),
         "receipt_template": DEFAULT_RECEIPT_TEMPLATE,
-        "printer": {
-            "type": "network_escpos",
-            "profile": profile.id,
-            "host": printer_host,
-            "port": 9100,
-            "timeout_seconds": 5,
-            "paper_columns": profile.paper_columns,
-            "code_page": profile.code_pages[0],
-            "image_logo": profile.image_logo,
-            "supports_print_density": profile.supports_print_density,
-            "supports_print_speed": profile.supports_print_speed,
-            "print_density": profile.print_density,
-            "print_speed": profile.print_speed,
-            "cut": profile.cut,
-        },
+        "printers": [_default_printer_raw("Default")],
         "workers": [
             {
                 "name": "Vincent",
                 "schedule": "",
                 "crewday_user_id": None,
                 "enabled": True,
+                "printer": "Default",
             }
         ],
     }
@@ -124,7 +129,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     crewday_raw = raw.get("crewday") or {}
     print_schedule_raw = raw.get("print_schedule") or {}
     receipt_template_raw = raw.get("receipt_template") or DEFAULT_RECEIPT_TEMPLATE
-    printer_raw = raw.get("printer") or {}
+    printers_raw = raw.get("printers") or []
     workers_raw = raw.get("workers") or []
     timezone = str(
         raw.get("timezone") or os.environ.get("PRINTER_TIMEZONE") or "Asia/Dubai"
@@ -154,31 +159,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     )
     validate_cron_or_empty(print_schedule.cron)
     validate_timezone(timezone)
-    profile_id = str(printer_raw.get("profile", default_profile().id))
-    profile = get_profile(profile_id) or default_profile()
-    printer = PrinterConfig(
-        type=str(printer_raw.get("type", "network_escpos")),
-        profile=profile_id,
-        host=str(printer_raw.get("host", "192.168.20.15")),
-        port=int(printer_raw.get("port", 9100)),
-        timeout_seconds=float(printer_raw.get("timeout_seconds", 5)),
-        paper_columns=int(printer_raw.get("paper_columns", profile.paper_columns)),
-        code_page=str(printer_raw.get("code_page", profile.code_pages[0])),
-        image_logo=bool(printer_raw.get("image_logo", profile.image_logo)),
-        supports_print_density=bool(
-            printer_raw.get(
-                "supports_print_density",
-                profile.supports_print_density,
-            )
-        ),
-        supports_print_speed=bool(
-            printer_raw.get("supports_print_speed", profile.supports_print_speed)
-        ),
-        print_density=int(printer_raw.get("print_density", profile.print_density)),
-        print_speed=int(printer_raw.get("print_speed", profile.print_speed)),
-        cut=bool(printer_raw.get("cut", profile.cut)),
-    )
-    validate_printer_config(printer)
+    printers = _parse_printers(printers_raw)
     receipt_template = parse_receipt_template(receipt_template_raw)
 
     workers = tuple(
@@ -187,6 +168,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
             schedule=str(worker.get("schedule", "")),
             crewday_user_id=worker.get("crewday_user_id"),
             enabled=bool(worker.get("enabled", True)),
+            printer=str(worker.get("printer", "")),
         )
         for worker in workers_raw
     )
@@ -196,9 +178,59 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         print_schedule=print_schedule,
         receipt_template=receipt_template,
         timezone=timezone,
-        printer=printer,
+        printers=printers,
         workers=workers,
     )
+
+
+def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
+    if not printers_raw:
+        raise ValueError("config must include at least one printer")
+    printers: list[PrinterConfig] = []
+    names: set[str] = set()
+    for printer_raw in printers_raw:
+        if not isinstance(printer_raw, dict):
+            raise ValueError("each printer entry must be a mapping")
+        name = str(printer_raw.get("name", "")).strip()
+        if not name:
+            raise ValueError("each printer must have a non-empty name")
+        if name in names:
+            raise ValueError(f"duplicate printer name: {name!r}")
+        names.add(name)
+        profile_id = str(printer_raw.get("profile", default_profile().id))
+        profile = get_profile(profile_id) or default_profile()
+        printer = PrinterConfig(
+            name=name,
+            type=str(printer_raw.get("type", "network_escpos")),
+            profile=profile_id,
+            host=str(printer_raw.get("host", "192.168.20.15")),
+            port=int(printer_raw.get("port", 9100)),
+            timeout_seconds=float(printer_raw.get("timeout_seconds", 5)),
+            paper_columns=int(
+                printer_raw.get("paper_columns", profile.paper_columns)
+            ),
+            code_page=str(printer_raw.get("code_page", profile.code_pages[0])),
+            image_logo=bool(printer_raw.get("image_logo", profile.image_logo)),
+            supports_print_density=bool(
+                printer_raw.get(
+                    "supports_print_density",
+                    profile.supports_print_density,
+                )
+            ),
+            supports_print_speed=bool(
+                printer_raw.get(
+                    "supports_print_speed", profile.supports_print_speed
+                )
+            ),
+            print_density=int(
+                printer_raw.get("print_density", profile.print_density)
+            ),
+            print_speed=int(printer_raw.get("print_speed", profile.print_speed)),
+            cut=bool(printer_raw.get("cut", profile.cut)),
+        )
+        validate_printer_config(printer)
+        printers.append(printer)
+    return tuple(printers)
 
 
 def default_receipt_template() -> ReceiptTemplateConfig:
@@ -319,7 +351,7 @@ def config_to_raw(config: AppConfig) -> dict[str, Any]:
                 asdict(section) for section in config.receipt_template.sections
             ]
         },
-        "printer": asdict(config.printer),
+        "printers": [asdict(printer) for printer in config.printers],
         "workers": [asdict(worker) for worker in config.workers],
     }
 

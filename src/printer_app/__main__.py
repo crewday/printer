@@ -14,28 +14,39 @@ from printer_app.task_source import build_task_source
 from printer_app.transport import send_to_network_printer
 
 
-def print_test(config_path: Path, dry_run: bool, worker_name: str | None) -> int:
+def print_test(
+    config_path: Path,
+    dry_run: bool,
+    worker_name: str | None,
+    printer_name: str | None,
+) -> int:
     config = load_config(config_path)
+    printer = _resolve_printer(config, printer_name)
     worker = select_worker(config.workers, worker_name)
     now = datetime.now(ZoneInfo(config.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
-    payload = render_receipt(batch, config.printer, now, config.receipt_template)
+    payload = render_receipt(batch, printer, now, config.receipt_template)
 
     if dry_run:
         sys.stdout.buffer.write(payload)
         return 0
 
-    send_to_network_printer(payload, config.printer)
+    send_to_network_printer(payload, printer)
     print(
         f"printed {len(payload)} bytes for {worker.name} "
-        f"to {config.printer.host}:{config.printer.port}",
+        f"to {printer.host}:{printer.port}",
         flush=True,
     )
     return 0
 
 
-def preview(config_path: Path, worker_name: str | None) -> int:
+def preview(
+    config_path: Path,
+    worker_name: str | None,
+    printer_name: str | None,
+) -> int:
     config = load_config(config_path)
+    printer = _resolve_printer(config, printer_name)
     worker = select_worker(config.workers, worker_name)
     now = datetime.now(ZoneInfo(config.timezone))
     batch = build_task_source(config).fetch_task_batch(worker, now=now)
@@ -43,7 +54,7 @@ def preview(config_path: Path, worker_name: str | None) -> int:
         receipt_text_preview(
             batch,
             now,
-            config.printer.paper_columns,
+            printer.paper_columns,
             config.receipt_template,
         )
     )
@@ -55,9 +66,10 @@ def black_test(
     dry_run: bool,
     density: int | None,
     speed: int | None,
+    printer_name: str | None,
 ) -> int:
     config = load_config(config_path)
-    printer = config.printer
+    printer = _resolve_printer(config, printer_name)
     if density is not None:
         printer = replace(printer, print_density=density)
     if speed is not None:
@@ -92,6 +104,15 @@ def serve(config_path: Path, host: str, port: int) -> int:
     return 0
 
 
+def _resolve_printer(config, printer_name: str | None):
+    if printer_name is not None:
+        printer = config.printer_by_name(printer_name)
+        if printer is None:
+            raise ValueError(f"printer not found in config: {printer_name}")
+        return printer
+    return config.first_printer()
+
+
 def select_worker(
     workers: tuple[WorkerConfig, ...],
     worker_name: str | None,
@@ -118,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     preview_parser = subparsers.add_parser("preview")
     preview_parser.add_argument("--config", type=Path, default=config_path_from_env())
     preview_parser.add_argument("--worker")
+    preview_parser.add_argument("--printer")
 
     print_test_parser = subparsers.add_parser("print-test")
     print_test_parser.add_argument(
@@ -127,6 +149,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     print_test_parser.add_argument("--dry-run", action="store_true")
     print_test_parser.add_argument("--worker")
+    print_test_parser.add_argument("--printer")
 
     black_test_parser = subparsers.add_parser("black-test")
     black_test_parser.add_argument(
@@ -137,6 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
     black_test_parser.add_argument("--dry-run", action="store_true")
     black_test_parser.add_argument("--density", type=int)
     black_test_parser.add_argument("--speed", type=int)
+    black_test_parser.add_argument("--printer")
 
     serve_parser = subparsers.add_parser("serve")
     serve_parser.add_argument("--config", type=Path, default=config_path_from_env())
@@ -153,11 +177,24 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'created' if created else 'exists'}: {args.config}")
         return 0
     if args.command == "preview":
-        return preview(args.config, args.worker)
+        return preview(
+            args.config, args.worker, getattr(args, "printer", None)
+        )
     if args.command == "print-test":
-        return print_test(args.config, args.dry_run, args.worker)
+        return print_test(
+            args.config,
+            args.dry_run,
+            args.worker,
+            getattr(args, "printer", None),
+        )
     if args.command == "black-test":
-        return black_test(args.config, args.dry_run, args.density, args.speed)
+        return black_test(
+            args.config,
+            args.dry_run,
+            args.density,
+            args.speed,
+            getattr(args, "printer", None),
+        )
     if args.command == "serve":
         return serve(args.config, args.host, args.port)
     raise ValueError(f"unknown command: {args.command}")

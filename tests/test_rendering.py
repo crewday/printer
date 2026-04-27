@@ -21,6 +21,7 @@ from printer_app.renderer import (
 
 def _printer() -> PrinterConfig:
     return PrinterConfig(
+        name="Default",
         type="network_escpos",
         profile="epson_tm_t20ii",
         host="127.0.0.1",
