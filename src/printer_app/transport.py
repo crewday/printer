@@ -9,14 +9,14 @@ SUPPORTED_TYPES = ("network_escpos", "usb_escpos", "cups_escpos")
 
 
 def send_to_printer(payload: bytes, printer: PrinterConfig) -> None:
-    if printer.type not in SUPPORTED_TYPES:
+    if printer.type == "network_escpos":
+        _send_network(payload, printer)
+    elif printer.type == "usb_escpos":
+        _send_usb(payload, printer)
+    elif printer.type == "cups_escpos":
+        _send_cups(payload, printer)
+    else:
         raise ValueError(f"unsupported printer type: {printer.type}")
-    dispatch = {
-        "network_escpos": _send_network,
-        "usb_escpos": _send_usb,
-        "cups_escpos": _send_cups,
-    }
-    dispatch[printer.type](payload, printer)
 
 
 def _send_network(payload: bytes, printer: PrinterConfig) -> None:
@@ -45,24 +45,36 @@ def _send_usb(payload: bytes, printer: PrinterConfig) -> None:
             f"no USB device found with vendor=0x{printer.usb_vendor_id:04x} "
             f"product=0x{printer.usb_product_id:04x}"
         )
+    detached = False
     try:
         if dev.is_kernel_driver_active(0):
             dev.detach_kernel_driver(0)
+            detached = True
         dev.set_configuration()
         cfg = dev.get_active_configuration()
         intf = cfg[(0, 0)]
         ep_out = usb.util.find_descriptor(
             intf,
-            custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress)
-            == usb.util.ENDPOINT_OUT,
+            custom_match=lambda e: (
+                usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
+            ),
         )
         if ep_out is None:
             raise ConnectionError("no OUT endpoint found on USB printer device")
-        ep_out.write(payload)
+        offset = 0
+        while offset < len(payload):
+            written = ep_out.write(payload[offset:])
+            offset += written
     except usb.core.USBError as exc:
         raise ConnectionError(f"USB write failed: {exc}") from exc
     finally:
         usb.util.dispose_resources(dev)
+        if detached:
+            try:
+                usb.util.dispose_resources(dev)
+                dev.attach_kernel_driver(0)
+            except usb.core.USBError, Exception:
+                pass
 
 
 def _send_cups(payload: bytes, printer: PrinterConfig) -> None:

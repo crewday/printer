@@ -16,7 +16,7 @@
       {% if config.printers %}
         <div class="printer-list">
           {% for printer in config.printers %}
-            <a href="/printer/{{ printer.name }}" class="printer-card">
+            <a href="/printer/{{ printer.name | urlencode }}" class="printer-card">
               <div class="printer-card__info">
                 <strong class="printer-card__name">{{ printer.name }}</strong>
                 <span class="printer-card__meta">
@@ -55,6 +55,14 @@
               <span class="field__label">Name</span>
               <input class="input" name="name" placeholder="e.g. Kitchen printer" required>
               <span class="field__hint">Unique name for this printer.</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Type</span>
+              <select class="input" name="printer_type" required>
+                <option value="network_escpos">Network (TCP)</option>
+                <option value="usb_escpos">USB</option>
+                <option value="cups_escpos">CUPS</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Profile</span>

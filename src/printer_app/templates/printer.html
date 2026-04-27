@@ -27,7 +27,7 @@
 {% block content %}
 <div class="grid">
   <div class="grid__col">
-    <form class="panel" method="post" action="/printer/{{ printer.name }}/settings">
+    <form class="panel" method="post" action="/printer/{{ printer.name | urlencode }}/settings">
       {% call panel_head("Settings", "Printer connection") %}
       {% endcall %}
       <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Connection and ESC/POS profile for <strong>{{ printer.name }}</strong>. Saved to the bind-mounted YAML config.</p>
@@ -160,7 +160,7 @@
       </div>
     </form>
 
-    {{ calibration_panel(printer, config) }}
+    {{ calibration_panel(printer, config, preview_worker) }}
   </div>
 
   <div class="grid__col">

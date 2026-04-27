@@ -90,6 +90,7 @@ def test_usb_send_finds_device_and_writes() -> None:
     mock_intf = MagicMock()
     mock_cfg.__getitem__ = lambda self, key: mock_intf
     mock_ep = MagicMock()
+    mock_ep.write.return_value = len(b"\x1b@")
     mock_usb = MagicMock()
     mock_usb.core.find.return_value = mock_dev
     mock_usb.util.find_descriptor.return_value = mock_ep
@@ -104,9 +105,7 @@ def test_usb_send_finds_device_and_writes() -> None:
         from printer_app.transport import _send_usb
 
         _send_usb(b"\x1b@", printer)
-        mock_usb.core.find.assert_called_once_with(
-            idVendor=0x04B8, idProduct=0x0E15
-        )
+        mock_usb.core.find.assert_called_once_with(idVendor=0x04B8, idProduct=0x0E15)
         mock_ep.write.assert_called_once_with(b"\x1b@")
 
 
@@ -136,7 +135,11 @@ def test_cups_send_calls_lp_command() -> None:
         mock_run.assert_called_once()
         args = mock_run.call_args
         assert args[0][0] == [
-            "lp", "-d", "TM-T20II", "-o", "raw",
+            "lp",
+            "-d",
+            "TM-T20II",
+            "-o",
+            "raw",
         ]
         assert args[1]["input"] == b"\x1b@"
 
@@ -144,9 +147,7 @@ def test_cups_send_calls_lp_command() -> None:
 def test_cups_send_raises_on_lp_failure() -> None:
     printer = _cups_printer()
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(
-            returncode=1, stderr=b"printer not found"
-        )
+        mock_run.return_value = MagicMock(returncode=1, stderr=b"printer not found")
         from printer_app.transport import _send_cups
 
         with pytest.raises(ConnectionError, match="CUPS lp failed"):
@@ -155,9 +156,7 @@ def test_cups_send_raises_on_lp_failure() -> None:
 
 def test_cups_send_raises_when_lp_not_found() -> None:
     printer = _cups_printer()
-    with patch(
-        "subprocess.run", side_effect=FileNotFoundError("lp not found")
-    ):
+    with patch("subprocess.run", side_effect=FileNotFoundError("lp not found")):
         from printer_app.transport import _send_cups
 
         with pytest.raises(ConnectionError, match="lp command not found"):

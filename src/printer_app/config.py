@@ -23,6 +23,7 @@ from printer_app.models import (
 )
 from printer_app.profiles import default_profile, get_profile, profile_ids
 from printer_app.secrets import decrypt_secret, encrypt_secret, is_encrypted_secret
+from printer_app.transport import SUPPORTED_TYPES
 
 DEFAULT_CONFIG_PATH = Path("/config/printer.yaml")
 
@@ -56,14 +57,12 @@ def config_path_from_env() -> Path:
     return Path(os.environ.get("PRINTER_CONFIG", str(DEFAULT_CONFIG_PATH)))
 
 
-def _default_printer_raw(name: str, host: str | None = None) -> dict[str, Any]:
+def _base_printer_raw(name: str, printer_type: str) -> dict[str, Any]:
     profile = default_profile()
-    return {
+    base = {
         "name": name,
-        "type": "network_escpos",
+        "type": printer_type,
         "profile": profile.id,
-        "host": host or os.environ.get("PRINTER_HOST", "192.168.20.15"),
-        "port": 9100,
         "timeout_seconds": 5,
         "paper_columns": profile.paper_columns,
         "code_page": profile.code_pages[0],
@@ -74,51 +73,33 @@ def _default_printer_raw(name: str, host: str | None = None) -> dict[str, Any]:
         "print_speed": profile.print_speed,
         "cut": profile.cut,
     }
+    return base
 
 
-def _default_usb_printer_raw(
-    name: str, vendor_id: int, product_id: int
+def default_network_printer_raw(name: str, host: str | None = None) -> dict[str, Any]:
+    raw = _base_printer_raw(name, "network_escpos")
+    raw["host"] = host or os.environ.get("PRINTER_HOST", "192.168.20.15")
+    raw["port"] = 9100
+    return raw
+
+
+def default_usb_printer_raw(
+    name: str, vendor_id: int = 0x04B8, product_id: int = 0x0E15
 ) -> dict[str, Any]:
-    profile = default_profile()
-    return {
-        "name": name,
-        "type": "usb_escpos",
-        "profile": profile.id,
-        "host": "",
-        "port": 0,
-        "timeout_seconds": 5,
-        "paper_columns": profile.paper_columns,
-        "code_page": profile.code_pages[0],
-        "image_logo": profile.image_logo,
-        "supports_print_density": profile.supports_print_density,
-        "supports_print_speed": profile.supports_print_speed,
-        "print_density": profile.print_density,
-        "print_speed": profile.print_speed,
-        "cut": profile.cut,
-        "usb_vendor_id": vendor_id,
-        "usb_product_id": product_id,
-    }
+    raw = _base_printer_raw(name, "usb_escpos")
+    raw["host"] = ""
+    raw["port"] = 0
+    raw["usb_vendor_id"] = vendor_id
+    raw["usb_product_id"] = product_id
+    return raw
 
 
-def _default_cups_printer_raw(name: str, cups_name: str) -> dict[str, Any]:
-    profile = default_profile()
-    return {
-        "name": name,
-        "type": "cups_escpos",
-        "profile": profile.id,
-        "host": "",
-        "port": 0,
-        "timeout_seconds": 5,
-        "paper_columns": profile.paper_columns,
-        "code_page": profile.code_pages[0],
-        "image_logo": profile.image_logo,
-        "supports_print_density": profile.supports_print_density,
-        "supports_print_speed": profile.supports_print_speed,
-        "print_density": profile.print_density,
-        "print_speed": profile.print_speed,
-        "cut": profile.cut,
-        "cups_printer_name": cups_name,
-    }
+def default_cups_printer_raw(name: str, cups_name: str = "TM-T20II") -> dict[str, Any]:
+    raw = _base_printer_raw(name, "cups_escpos")
+    raw["host"] = ""
+    raw["port"] = 0
+    raw["cups_printer_name"] = cups_name
+    return raw
 
 
 def default_config() -> dict[str, Any]:
@@ -141,7 +122,7 @@ def default_config() -> dict[str, Any]:
         },
         "timezone": os.environ.get("PRINTER_TIMEZONE", "Asia/Dubai"),
         "receipt_template": DEFAULT_RECEIPT_TEMPLATE,
-        "printers": [_default_printer_raw("Default")],
+        "printers": [default_network_printer_raw("Default")],
         "workers": [
             {
                 "name": "Vincent",
@@ -250,14 +231,10 @@ def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
             name=name,
             type=printer_type,
             profile=profile_id,
-            host=str(
-                printer_raw.get("host", "192.168.20.15" if is_network else "")
-            ),
+            host=str(printer_raw.get("host", "192.168.20.15" if is_network else "")),
             port=int(printer_raw.get("port", 9100 if is_network else 0)),
             timeout_seconds=float(printer_raw.get("timeout_seconds", 5)),
-            paper_columns=int(
-                printer_raw.get("paper_columns", profile.paper_columns)
-            ),
+            paper_columns=int(printer_raw.get("paper_columns", profile.paper_columns)),
             code_page=str(printer_raw.get("code_page", profile.code_pages[0])),
             image_logo=bool(printer_raw.get("image_logo", profile.image_logo)),
             supports_print_density=bool(
@@ -267,13 +244,9 @@ def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
                 )
             ),
             supports_print_speed=bool(
-                printer_raw.get(
-                    "supports_print_speed", profile.supports_print_speed
-                )
+                printer_raw.get("supports_print_speed", profile.supports_print_speed)
             ),
-            print_density=int(
-                printer_raw.get("print_density", profile.print_density)
-            ),
+            print_density=int(printer_raw.get("print_density", profile.print_density)),
             print_speed=int(printer_raw.get("print_speed", profile.print_speed)),
             cut=bool(printer_raw.get("cut", profile.cut)),
             usb_vendor_id=_parse_optional_int(printer_raw.get("usb_vendor_id")),
@@ -351,7 +324,7 @@ def _parse_optional_int(value: object) -> int | None:
 
 
 def validate_printer_config(printer: PrinterConfig) -> None:
-    if printer.type not in ("network_escpos", "usb_escpos", "cups_escpos"):
+    if printer.type not in SUPPORTED_TYPES:
         raise ValueError(f"unsupported printer.type: {printer.type}")
     if printer.profile not in profile_ids():
         raise ValueError(f"unsupported printer.profile: {printer.profile}")

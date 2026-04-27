@@ -10,7 +10,7 @@
 {% endmacro %}
 
 
-{% macro calibration_panel(printer, config) %}
+{% macro calibration_panel(printer, config, preview_worker) %}
 <section class="panel">
   {% call panel_head("Calibration", "Density &amp; speed wizard") %}
   {% endcall %}
@@ -18,7 +18,7 @@
     Runs the documented sweep as compact strips on <strong>{{ printer.name }}</strong>. Each step cuts only after the strip finishes.
   </p>
 
-  <form method="post" action="/printer/{{ printer.name }}/calibration/wizard" class="wizard">
+  <form method="post" action="/printer/{{ printer.name | urlencode }}/calibration/wizard" class="wizard">
     <div class="form__row">
       <label class="field">
         <span class="field__label">Best density</span>
@@ -57,7 +57,7 @@
 
   <hr class="panel__divider">
 
-  <form method="post" action="/printer/{{ printer.name }}/black-test" class="form">
+  <form method="post" action="/printer/{{ printer.name | urlencode }}/black-test" class="form">
     {% call panel_head("Feature sample", "Black test") %}
     {% endcall %}
     <div class="form__row">
@@ -83,7 +83,7 @@
     Prints font A/B, bold, underline, double width/height, alignment,
     reverse text, and symbols on <strong>{{ printer.name }}</strong>.
   </p>
-  <form method="post" action="/printer/{{ printer.name }}/font-test">
+  <form method="post" action="/printer/{{ printer.name | urlencode }}/font-test">
     <div class="btn-group btn-group--end">
       <button type="submit" class="btn">Print font test</button>
     </div>
@@ -98,7 +98,7 @@
     <strong>{{ preview_worker.name }}</strong>
     to <strong>{{ printer.name }}</strong>.
   </p>
-  <form method="post" action="/printer/{{ printer.name }}/print-test">
+  <form method="post" action="/printer/{{ printer.name | urlencode }}/print-test">
     <div class="btn-group btn-group--end">
       <button type="submit" class="btn btn--rust">Send to printer</button>
     </div>
@@ -144,7 +144,7 @@
         {% endfor %}
       </select>
     </label>
-    <form method="post" action="/printer/{{ active_printer_name }}/dry-run" id="dry-run-form">
+    <form method="post" action="/printer/{{ active_printer_name | urlencode }}/dry-run" id="dry-run-form">
       <button type="submit" class="btn btn--ghost">Download bytes</button>
     </form>
   </div>

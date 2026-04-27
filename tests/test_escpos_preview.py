@@ -27,9 +27,8 @@ def test_render_payload_to_png_returns_receipt_dimensions() -> None:
 
 
 def test_render_payload_to_image_renders_raster_graphics() -> None:
-    payload = (
-        escpos.command(escpos.ESC, b"@")
-        + escpos.filled_raster_block(width_bytes=2, height_dots=3)
+    payload = escpos.command(escpos.ESC, b"@") + escpos.filled_raster_block(
+        width_bytes=2, height_dots=3
     )
 
     image = render_payload_to_image(payload, columns=48, width_dots=576)

@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import Body, Depends, FastAPI, Form, HTTPException, Query, Request, status
@@ -22,7 +23,10 @@ from printer_app.auth import configured_password_hash, hash_password, verify_pas
 from printer_app.config import (
     config_path_from_env,
     config_to_raw,
+    default_cups_printer_raw,
+    default_network_printer_raw,
     default_receipt_template,
+    default_usb_printer_raw,
     load_config,
     parse_receipt_template,
     write_raw_config,
@@ -47,7 +51,11 @@ from printer_app.renderer import (
 )
 from printer_app.secrets import secret_key_configured
 from printer_app.task_source import build_task_source, fetch_crewday_workers
-from printer_app.transport import printer_connection_label, send_to_printer
+from printer_app.transport import (
+    SUPPORTED_TYPES,
+    printer_connection_label,
+    send_to_printer,
+)
 
 RECENT_RESULTS: list[str] = []
 SCHEDULER_TASK: asyncio.Task[None] | None = None
@@ -139,6 +147,13 @@ def _resolve_printer(config: AppConfig, name: str) -> PrinterConfig:
     return printer
 
 
+def _printer_url(name: str, *suffix: str) -> str:
+    path = "/printer/" + quote(name, safe="")
+    if suffix:
+        path += "/" + "/".join(suffix)
+    return path
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLResponse:
     config = load_config(config_path_from_env())
@@ -149,6 +164,7 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
         {
             "config": config,
             "profiles": load_profiles(),
+            "printer_types": SUPPORTED_TYPES,
             "crewday_workers": crewday_workers,
             "crewday_worker_error": crewday_error,
             "results": list(reversed(RECENT_RESULTS[-8:])),
@@ -186,6 +202,7 @@ def add_printer(
     _: Annotated[None, Depends(require_auth)],
     name: Annotated[str, Form()],
     profile: Annotated[str, Form()],
+    printer_type: Annotated[str, Form()] = "network_escpos",
 ) -> RedirectResponse:
     config = load_config(config_path_from_env())
     raw = config_to_raw(config)
@@ -197,9 +214,14 @@ def add_printer(
     if printer_name in existing_names:
         _record(f"Printer name already exists: {printer_name!r}")
         return RedirectResponse("/", status_code=303)
-    from printer_app.config import _default_printer_raw
 
-    raw["printers"].append(_default_printer_raw(printer_name))
+    factories = {
+        "network_escpos": default_network_printer_raw,
+        "usb_escpos": default_usb_printer_raw,
+        "cups_escpos": default_cups_printer_raw,
+    }
+    factory = factories.get(printer_type, default_network_printer_raw)
+    raw["printers"].append(factory(printer_name))
     raw["printers"][-1]["profile"] = profile
     try:
         write_raw_config(config_path_from_env(), raw)
@@ -207,7 +229,7 @@ def add_printer(
         _record(f"Printer was not added: {exc}")
     else:
         _record(f"Added printer {printer_name!r}.")
-    return RedirectResponse(f"/printer/{printer_name}", status_code=303)
+    return RedirectResponse(_printer_url(printer_name), status_code=303)
 
 
 @app.post("/printers/{name}/delete")
@@ -311,7 +333,7 @@ def save_printer_settings(
         _record(f"Printer settings were not saved: {exc}")
     else:
         _record(f"Saved settings for printer {name!r}.")
-    return RedirectResponse(f"/printer/{name}", status_code=303)
+    return RedirectResponse(_printer_url(name), status_code=303)
 
 
 @app.post("/printer/{name}/dry-run")
@@ -344,10 +366,9 @@ def printer_print_test(
         _record(f"Print test failed for {name!r}: {exc}")
     else:
         _record(
-            f"Printed {result['bytes']} bytes "
-            f"to {printer_connection_label(printer)}."
+            f"Printed {result['bytes']} bytes to {printer_connection_label(printer)}."
         )
-    return RedirectResponse(f"/printer/{name}", status_code=303)
+    return RedirectResponse(_printer_url(name), status_code=303)
 
 
 @app.post("/printer/{name}/black-test")
@@ -367,7 +388,7 @@ def printer_black_test(
         _record(f"Black test failed for {name!r}: {exc}")
     else:
         _record(f"Printed black test on {name!r} with density={density} speed={speed}.")
-    return RedirectResponse(f"/printer/{name}", status_code=303)
+    return RedirectResponse(_printer_url(name), status_code=303)
 
 
 @app.post("/printer/{name}/font-test")
@@ -387,7 +408,7 @@ def printer_font_test(
             f"Printed font test to {printer_connection_label(printer)} "
             f"({name!r}) with {printer.code_page}."
         )
-    return RedirectResponse(f"/printer/{name}", status_code=303)
+    return RedirectResponse(_printer_url(name), status_code=303)
 
 
 @app.post("/printer/{name}/calibration/wizard")
@@ -404,7 +425,7 @@ def printer_calibration_wizard(
         settings = _calibration_settings(phase, density, speed)
     except ValueError as exc:
         _record(f"Calibration wizard failed for {name!r}: {exc}")
-        return RedirectResponse(f"/printer/{name}", status_code=303)
+        return RedirectResponse(_printer_url(name), status_code=303)
 
     printer = replace(printer, cut=True)
     payload = render_calibration_sweep(
@@ -419,7 +440,7 @@ def printer_calibration_wizard(
     else:
         combos = ", ".join(f"d={d}/s={s}" for d, s in settings)
         _record(f"Printed calibration strip on {name!r} ({combos}); cut at end.")
-    return RedirectResponse(f"/printer/{name}", status_code=303)
+    return RedirectResponse(_printer_url(name), status_code=303)
 
 
 @app.post("/crewday")

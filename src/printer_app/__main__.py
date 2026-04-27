@@ -177,9 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{'created' if created else 'exists'}: {args.config}")
         return 0
     if args.command == "preview":
-        return preview(
-            args.config, args.worker, getattr(args, "printer", None)
-        )
+        return preview(args.config, args.worker, getattr(args, "printer", None))
     if args.command == "print-test":
         return print_test(
             args.config,
