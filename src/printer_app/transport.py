@@ -106,6 +106,66 @@ def _send_cups(payload: bytes, printer: PrinterConfig) -> None:
         )
 
 
+def discover_usb_devices() -> list[dict[str, object]]:
+    try:
+        import usb.core
+    except Exception:
+        return []
+    try:
+        devices = usb.core.find(find_all=True)
+        results: list[dict[str, object]] = []
+        for dev in devices:
+            try:
+                manufacturer = usb.core.util.get_string(dev, dev.iManufacturer) if dev.iManufacturer else ""
+            except Exception:
+                manufacturer = ""
+            try:
+                product = usb.core.util.get_string(dev, dev.iProduct) if dev.iProduct else ""
+            except Exception:
+                product = ""
+            parts = [p for p in (manufacturer, product) if p]
+            description = " ".join(parts) or f"USB device 0x{dev.idVendor:04x}:0x{dev.idProduct:04x}"
+            results.append({
+                "vendor_id": dev.idVendor,
+                "product_id": dev.idProduct,
+                "description": description,
+            })
+        return results
+    except Exception:
+        return []
+
+
+def discover_cups_printers() -> list[dict[str, object]]:
+    try:
+        result = subprocess.run(
+            ["lpstat", "-p", "-d"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+    if result.returncode != 0:
+        return []
+    printers: list[dict[str, object]] = []
+    default_name: str | None = None
+    for line in result.stdout.strip().splitlines():
+        line = line.strip()
+        if line.startswith("printer"):
+            parts = line.split()
+            if len(parts) >= 2:
+                name = parts[1]
+                status = " ".join(parts[3:]) if len(parts) > 3 else "idle"
+                printers.append({"name": name, "status": status, "is_default": False})
+        elif line.startswith("system default destination:"):
+            default_name = line.split(":")[-1].strip()
+    if default_name:
+        for p in printers:
+            if p["name"] == default_name:
+                p["is_default"] = True
+    return printers
+
+
 def printer_connection_label(printer: PrinterConfig) -> str:
     if printer.type == "network_escpos":
         return f"{printer.host}:{printer.port}"

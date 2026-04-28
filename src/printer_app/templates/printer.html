@@ -27,6 +27,22 @@
 {% block content %}
 <div class="grid">
   <div class="grid__col">
+    <form class="panel" method="post" action="/printer/{{ printer.name | urlencode }}/rename">
+      {% call panel_head("Name", "Printer identity") %}
+      {% endcall %}
+      <div class="form">
+        <div class="form__row">
+          <label class="field">
+            <span class="field__label">Printer name</span>
+            <input class="input" name="new_name" value="{{ printer.name }}" required>
+          </label>
+        </div>
+      </div>
+      <div class="btn-group btn-group--end">
+        <button type="submit" class="btn btn--moss">Rename</button>
+      </div>
+    </form>
+
     <form class="panel" method="post" action="/printer/{{ printer.name | urlencode }}/settings">
       {% call panel_head("Settings", "Printer connection") %}
       {% endcall %}
@@ -52,15 +68,25 @@
         {% elif printer.type == "usb_escpos" %}
         <div class="form__row">
           <label class="field">
-            <span class="field__label">Vendor ID</span>
-            <input class="input" name="usb_vendor_id" value="{{ "0x%04x" | format(printer.usb_vendor_id) }}" required>
-            <span class="field__hint">hex, e.g. 0x04b8</span>
+            <span class="field__label">USB Device</span>
+            <select class="input" id="usb-device-select">
+              <option value="">Loading…</option>
+            </select>
           </label>
-          <label class="field">
-            <span class="field__label">Product ID</span>
-            <input class="input" name="usb_product_id" value="{{ "0x%04x" | format(printer.usb_product_id) }}" required>
-            <span class="field__hint">hex, e.g. 0x0e15</span>
-          </label>
+          <input type="hidden" name="usb_vendor_id" id="usb-vendor-id" value="{{ "0x%04x" | format(printer.usb_vendor_id) }}">
+          <input type="hidden" name="usb_product_id" id="usb-product-id" value="{{ "0x%04x" | format(printer.usb_product_id) }}">
+          <div id="usb-manual-fields" class="form__row" hidden>
+            <label class="field">
+              <span class="field__label">Vendor ID</span>
+              <input class="input" name="usb_vendor_id_manual" id="usb-vendor-id-manual" placeholder="0x04b8">
+              <span class="field__hint">hex</span>
+            </label>
+            <label class="field">
+              <span class="field__label">Product ID</span>
+              <input class="input" name="usb_product_id_manual" id="usb-product-id-manual" placeholder="0x0e15">
+              <span class="field__hint">hex</span>
+            </label>
+          </div>
           <label class="field">
             <span class="field__label">Timeout</span>
             <input class="input" name="timeout_seconds" type="number" step="0.1" value="{{ printer.timeout_seconds }}" required>
@@ -71,9 +97,17 @@
         <div class="form__row">
           <label class="field">
             <span class="field__label">CUPS Printer</span>
-            <input class="input" name="cups_printer_name" value="{{ printer.cups_printer_name }}" required>
-            <span class="field__hint">CUPS queue name</span>
+            <select class="input" id="cups-device-select">
+              <option value="">Loading…</option>
+            </select>
           </label>
+          <input type="hidden" name="cups_printer_name" id="cups-printer-name" value="{{ printer.cups_printer_name }}">
+          <div id="cups-manual-field" hidden>
+            <label class="field">
+              <span class="field__label">Queue name (manual)</span>
+              <input class="input" id="cups-manual-input" placeholder="printer-name">
+            </label>
+          </div>
           <label class="field">
             <span class="field__label">Timeout</span>
             <input class="input" name="timeout_seconds" type="number" step="0.1" value="{{ printer.timeout_seconds }}" required>
@@ -82,7 +116,7 @@
         </div>
         {% endif %}
 
-        <h3 class="section-title">Paper &amp; ESC/POS</h3>
+        <h3 class="section-title">Paper & ESC/POS</h3>
         <div class="form__row">
           <label class="field">
             <span class="field__label">Profile</span>
@@ -171,6 +205,151 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+  (function () {
+    var printerType = "{{ printer.type }}";
+    var currentVendor = "{{ "0x%04x" | format(printer.usb_vendor_id or 0) }}";
+    var currentProduct = "{{ "0x%04x" | format(printer.usb_product_id or 0) }}";
+    var currentCupsName = "{{ printer.cups_printer_name or '' }}";
+
+    function hex4(n) { return "0x" + ("0000" + n.toString(16)).slice(-4); }
+
+    if (printerType === "usb_escpos") {
+      var usbSelect = document.getElementById("usb-device-select");
+      var vendorInput = document.getElementById("usb-vendor-id");
+      var productInput = document.getElementById("usb-product-id");
+      var manualFields = document.getElementById("usb-manual-fields");
+      var vendorManual = document.getElementById("usb-vendor-id-manual");
+      var productManual = document.getElementById("usb-product-id-manual");
+
+      fetch("/api/discover/usb", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (devices) {
+          usbSelect.innerHTML = "";
+          if (devices.length === 0) {
+            var opt = document.createElement("option");
+            opt.value = "__none__";
+            opt.textContent = "No USB devices found — use manual entry";
+            usbSelect.appendChild(opt);
+            manualFields.hidden = false;
+            vendorManual.value = currentVendor;
+            productManual.value = currentProduct;
+            return;
+          }
+          var currentKey = currentVendor + ":" + currentProduct;
+          devices.forEach(function (dev) {
+            var opt = document.createElement("option");
+            var vid = hex4(dev.vendor_id);
+            var pid = hex4(dev.product_id);
+            opt.value = vid + ":" + pid;
+            opt.textContent = dev.description + " (" + vid + ":" + pid + ")";
+            if (vid + ":" + pid === currentKey) opt.selected = true;
+            usbSelect.appendChild(opt);
+          });
+          var manualOpt = document.createElement("option");
+          manualOpt.value = "__manual__";
+          manualOpt.textContent = "Other / manual entry";
+          usbSelect.appendChild(manualOpt);
+
+          if (!usbSelect.querySelector("option[selected]")) {
+            usbSelect.value = "__manual__";
+            manualFields.hidden = false;
+            vendorManual.value = currentVendor;
+            productManual.value = currentProduct;
+          }
+        })
+        .catch(function () {
+          usbSelect.innerHTML = "";
+          var opt = document.createElement("option");
+          opt.value = "__none__";
+          opt.textContent = "USB discovery unavailable — use manual entry";
+          usbSelect.appendChild(opt);
+          manualFields.hidden = false;
+          vendorManual.value = currentVendor;
+          productManual.value = currentProduct;
+        });
+
+      usbSelect.addEventListener("change", function () {
+        if (usbSelect.value === "__manual__" || usbSelect.value === "__none__") {
+          manualFields.hidden = false;
+          vendorInput.value = "";
+          productInput.value = "";
+        } else {
+          manualFields.hidden = true;
+          var parts = usbSelect.value.split(":");
+          vendorInput.value = parts[0];
+          productInput.value = parts[1];
+        }
+      });
+
+      vendorManual.addEventListener("input", function () { vendorInput.value = vendorManual.value; });
+      productManual.addEventListener("input", function () { productInput.value = productManual.value; });
+    }
+
+    if (printerType === "cups_escpos") {
+      var cupsSelect = document.getElementById("cups-device-select");
+      var cupsNameInput = document.getElementById("cups-printer-name");
+      var cupsManualWrap = document.getElementById("cups-manual-field");
+      var cupsManualInput = document.getElementById("cups-manual-input");
+
+      fetch("/api/discover/cups", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (printers) {
+          cupsSelect.innerHTML = "";
+          if (printers.length === 0) {
+            var opt = document.createElement("option");
+            opt.value = "__none__";
+            opt.textContent = "No CUPS printers found — use manual entry";
+            cupsSelect.appendChild(opt);
+            cupsManualWrap.hidden = false;
+            cupsManualInput.value = currentCupsName;
+            return;
+          }
+          printers.forEach(function (p) {
+            var opt = document.createElement("option");
+            opt.value = p.name;
+            var label = p.name;
+            if (p.is_default) label += " (default)";
+            if (p.status) label += " — " + p.status;
+            opt.textContent = label;
+            if (p.name === currentCupsName) opt.selected = true;
+            cupsSelect.appendChild(opt);
+          });
+          var manualOpt = document.createElement("option");
+          manualOpt.value = "__manual__";
+          manualOpt.textContent = "Other / manual entry";
+          cupsSelect.appendChild(manualOpt);
+
+          if (!cupsSelect.querySelector("option[selected]")) {
+            cupsSelect.value = "__manual__";
+            cupsManualWrap.hidden = false;
+            cupsManualInput.value = currentCupsName;
+          }
+        })
+        .catch(function () {
+          cupsSelect.innerHTML = "";
+          var opt = document.createElement("option");
+          opt.value = "__none__";
+          opt.textContent = "CUPS discovery unavailable — use manual entry";
+          cupsSelect.appendChild(opt);
+          cupsManualWrap.hidden = false;
+          cupsManualInput.value = currentCupsName;
+        });
+
+      cupsSelect.addEventListener("change", function () {
+        if (cupsSelect.value === "__manual__" || cupsSelect.value === "__none__") {
+          cupsManualWrap.hidden = false;
+          cupsNameInput.value = "";
+        } else {
+          cupsManualWrap.hidden = true;
+          cupsNameInput.value = cupsSelect.value;
+        }
+      });
+
+      cupsManualInput.addEventListener("input", function () { cupsNameInput.value = cupsManualInput.value; });
+    }
+  })();
+</script>
 <script>
   (function () {
     var profiles = {{ profile_data | tojson }};

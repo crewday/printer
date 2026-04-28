@@ -53,6 +53,8 @@ from printer_app.secrets import secret_key_configured
 from printer_app.task_source import build_task_source, fetch_crewday_workers
 from printer_app.transport import (
     SUPPORTED_TYPES,
+    discover_cups_printers,
+    discover_usb_devices,
     printer_connection_label,
     send_to_printer,
 )
@@ -115,6 +117,7 @@ class TemplateSectionPayload(BaseModel):
 
 class TemplatePayload(BaseModel):
     sections: list[TemplateSectionPayload]
+    printer_name: str | None = None
 
 
 def require_auth(
@@ -158,6 +161,8 @@ def _printer_url(name: str, *suffix: str) -> str:
 def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLResponse:
     config = load_config(config_path_from_env())
     crewday_workers, crewday_error = _load_worker_roster(config)
+    printer = config.first_printer()
+    preview = _preview_for_first_worker(config, config.receipt_template, printer)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -171,6 +176,8 @@ def index(request: Request, _: Annotated[None, Depends(require_auth)]) -> HTMLRe
             "template_data": _template_to_payload(config.receipt_template),
             "default_template_data": _template_to_payload(default_receipt_template()),
             "secret_key_configured": secret_key_configured(),
+            "preview": preview,
+            "preview_printer_name": printer.name,
         },
     )
 
@@ -334,6 +341,38 @@ def save_printer_settings(
     else:
         _record(f"Saved settings for printer {name!r}.")
     return RedirectResponse(_printer_url(name), status_code=303)
+
+
+@app.post("/printer/{name}/rename")
+def rename_printer(
+    name: str,
+    _: Annotated[None, Depends(require_auth)],
+    new_name: Annotated[str, Form()],
+) -> RedirectResponse:
+    new_name = new_name.strip()
+    if not new_name:
+        _record("Printer name cannot be empty.")
+        return RedirectResponse(_printer_url(name), status_code=303)
+    config = load_config(config_path_from_env())
+    _resolve_printer(config, name)
+    if config.printer_by_name(new_name) is not None:
+        _record(f"Printer name already exists: {new_name!r}")
+        return RedirectResponse(_printer_url(name), status_code=303)
+    raw = config_to_raw(config)
+    for entry in raw["printers"]:
+        if entry.get("name") == name:
+            entry["name"] = new_name
+            break
+    for worker in raw.get("workers", []):
+        if worker.get("printer") == name:
+            worker["printer"] = new_name
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Printer was not renamed: {exc}")
+    else:
+        _record(f"Renamed printer {name!r} to {new_name!r}.")
+    return RedirectResponse(_printer_url(new_name), status_code=303)
 
 
 @app.post("/printer/{name}/dry-run")
@@ -573,6 +612,20 @@ def print_receipts_api(
     return result
 
 
+@app.get("/api/discover/usb")
+def discover_usb_api(
+    _: Annotated[None, Depends(require_auth)],
+) -> list[dict[str, object]]:
+    return discover_usb_devices()
+
+
+@app.get("/api/discover/cups")
+def discover_cups_api(
+    _: Annotated[None, Depends(require_auth)],
+) -> list[dict[str, object]]:
+    return discover_cups_printers()
+
+
 @app.post("/api/template/preview")
 def template_preview(
     _: Annotated[None, Depends(require_auth)],
@@ -580,7 +633,10 @@ def template_preview(
 ) -> dict[str, object]:
     config = load_config(config_path_from_env())
     template = _payload_to_template(payload)
-    printer = config.first_printer()
+    if payload.printer_name:
+        printer = _resolve_printer(config, payload.printer_name)
+    else:
+        printer = config.first_printer()
     preview = _preview_for_first_worker(config, template, printer)
     return preview
 

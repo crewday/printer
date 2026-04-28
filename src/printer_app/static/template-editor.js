@@ -519,7 +519,9 @@
     var token = ++pendingPreviewToken;
     setStatus("Rendering preview…", "busy");
     previewBtn.disabled = true;
-    postJSON("/api/template/preview", { sections: sections })
+    var printerEl = document.querySelector("[name='preview_printer']");
+    var printerName = printerEl ? printerEl.value : undefined;
+    postJSON("/api/template/preview", { sections: sections, printer_name: printerName })
       .then(function (r) {
         if (!r.ok) return r.json().then(function (j) { throw new Error(j.detail || "Preview failed"); });
         return r.json();
