@@ -580,6 +580,15 @@
   saveBtn.addEventListener("click", saveTemplate);
   resetBtn.addEventListener("click", resetToDefault);
 
+  var printerSelect = document.querySelector("[name='preview_printer']");
+  if (printerSelect) {
+    printerSelect.addEventListener("change", generatePreview);
+  }
+  var refreshBtn = document.getElementById("preview-refresh");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", generatePreview);
+  }
+
   renderPalette();
   renderDropzone();
   setDirtyChip();

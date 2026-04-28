@@ -1,5 +1,5 @@
 ui:
-  username: enc:v1:gAAAAABp7ggcm-jbU9RTXLfEhK9xBfmmHMmV-QZpg0Vg-dLTKaR9JpLT6W-YeLfwbvuFFGDQg8oyEhklJMp38E3Ajv15UZf28g==
+  username: enc:v1:gAAAAABp8OTuclhpYlTmCh4wPrAn4oUIoCKrwgvxEfEA_AStQ3-zP6JuqStm3KeXpqUgJNo1y4072IsNgjnSoBKe405G7ub5pg==
   password_hash: null
 crewday:
   source: mock
@@ -13,6 +13,7 @@ timezone: Asia/Dubai
 receipt_template:
   sections:
   - type: logo
+    value: null
     align: center
     font: a
     width: 1
@@ -22,6 +23,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: text
+    value: '{{ worker_name }}, {{ display_date }}'
     align: center
     font: b
     width: 2
@@ -30,8 +32,8 @@ receipt_template:
     underline: 0
     scale: 1.0
     trailing_blank: true
-    value: '{{ worker_name }}, {{ display_date }}'
   - type: text
+    value: Printed on {{ display_datetime }}
     align: center
     font: b
     width: 1
@@ -40,8 +42,8 @@ receipt_template:
     underline: 0
     scale: 1.0
     trailing_blank: true
-    value: Printed on {{ display_datetime }}
   - type: separator
+    value: null
     align: center
     font: a
     width: 1
@@ -51,6 +53,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: tasks
+    value: null
     align: left
     font: a
     width: 1
@@ -60,6 +63,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: true
   - type: separator
+    value: null
     align: center
     font: a
     width: 1
@@ -69,6 +73,7 @@ receipt_template:
     scale: 1.0
     trailing_blank: false
   - type: logo
+    value: null
     align: center
     font: a
     width: 1
@@ -78,20 +83,57 @@ receipt_template:
     scale: 0.5
     trailing_blank: true
 printers:
-  - name: Default
-    type: network_escpos
-    profile: epson_tm_t20ii
-    host: 192.168.20.15
-    port: 9100
-    timeout_seconds: 5.0
-    paper_columns: 48
-    code_page: cp1252
-    image_logo: true
-    supports_print_density: true
-    supports_print_speed: true
-    print_density: 8
-    print_speed: 6
-    cut: true
+- name: Default
+  type: network_escpos
+  profile: epson_tm_t20ii
+  host: 192.168.20.15
+  port: 9100
+  timeout_seconds: 5.0
+  paper_columns: 48
+  code_page: cp1252
+  image_logo: true
+  supports_print_density: true
+  supports_print_speed: true
+  print_density: 8
+  print_speed: 6
+  cut: true
+  usb_vendor_id: null
+  usb_product_id: null
+  cups_printer_name: null
+- name: USB
+  type: usb_escpos
+  profile: epson_tm_t20ii
+  host: ''
+  port: 0
+  timeout_seconds: 5.0
+  paper_columns: 48
+  code_page: cp858
+  image_logo: true
+  supports_print_density: true
+  supports_print_speed: true
+  print_density: 8
+  print_speed: 6
+  cut: true
+  usb_vendor_id: 1208
+  usb_product_id: 3605
+  cups_printer_name: null
+- name: CUPS
+  type: cups_escpos
+  profile: epson_tm_t20ii
+  host: ''
+  port: 0
+  timeout_seconds: 5.0
+  paper_columns: 42
+  code_page: cp858
+  image_logo: true
+  supports_print_density: true
+  supports_print_speed: true
+  print_density: 8
+  print_speed: 6
+  cut: true
+  usb_vendor_id: null
+  usb_product_id: null
+  cups_printer_name: TM-T20II
 workers:
 - name: Vincent
   schedule: ''

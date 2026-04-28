@@ -73,20 +73,20 @@
               <option value="">Loading…</option>
             </select>
           </label>
+          <label class="field" id="usb-manual-vendor" hidden>
+            <span class="field__label">Vendor ID</span>
+            <input class="input" name="usb_vendor_id_manual" id="usb-vendor-id-manual" placeholder="0x04b8">
+            <span class="field__hint">hex</span>
+          </label>
+          <label class="field" id="usb-manual-product" hidden>
+            <span class="field__label">Product ID</span>
+            <input class="input" name="usb_product_id_manual" id="usb-product-id-manual" placeholder="0x0e15">
+            <span class="field__hint">hex</span>
+          </label>
           <input type="hidden" name="usb_vendor_id" id="usb-vendor-id" value="{{ "0x%04x" | format(printer.usb_vendor_id) }}">
           <input type="hidden" name="usb_product_id" id="usb-product-id" value="{{ "0x%04x" | format(printer.usb_product_id) }}">
-          <div id="usb-manual-fields" class="form__row" hidden>
-            <label class="field">
-              <span class="field__label">Vendor ID</span>
-              <input class="input" name="usb_vendor_id_manual" id="usb-vendor-id-manual" placeholder="0x04b8">
-              <span class="field__hint">hex</span>
-            </label>
-            <label class="field">
-              <span class="field__label">Product ID</span>
-              <input class="input" name="usb_product_id_manual" id="usb-product-id-manual" placeholder="0x0e15">
-              <span class="field__hint">hex</span>
-            </label>
-          </div>
+        </div>
+        <div class="form__row">
           <label class="field">
             <span class="field__label">Timeout</span>
             <input class="input" name="timeout_seconds" type="number" step="0.1" value="{{ printer.timeout_seconds }}" required>
@@ -218,9 +218,15 @@
       var usbSelect = document.getElementById("usb-device-select");
       var vendorInput = document.getElementById("usb-vendor-id");
       var productInput = document.getElementById("usb-product-id");
-      var manualFields = document.getElementById("usb-manual-fields");
+      var manualVendor = document.getElementById("usb-manual-vendor");
+      var manualProduct = document.getElementById("usb-manual-product");
       var vendorManual = document.getElementById("usb-vendor-id-manual");
       var productManual = document.getElementById("usb-product-id-manual");
+
+      function showManualFields(show) {
+        manualVendor.hidden = !show;
+        manualProduct.hidden = !show;
+      }
 
       fetch("/api/discover/usb", { credentials: "same-origin" })
         .then(function (r) { return r.json(); })
@@ -231,7 +237,7 @@
             opt.value = "__none__";
             opt.textContent = "No USB devices found — use manual entry";
             usbSelect.appendChild(opt);
-            manualFields.hidden = false;
+            showManualFields(true);
             vendorManual.value = currentVendor;
             productManual.value = currentProduct;
             return;
@@ -253,7 +259,7 @@
 
           if (!usbSelect.querySelector("option[selected]")) {
             usbSelect.value = "__manual__";
-            manualFields.hidden = false;
+            showManualFields(true);
             vendorManual.value = currentVendor;
             productManual.value = currentProduct;
           }
@@ -264,18 +270,18 @@
           opt.value = "__none__";
           opt.textContent = "USB discovery unavailable — use manual entry";
           usbSelect.appendChild(opt);
-          manualFields.hidden = false;
+          showManualFields(true);
           vendorManual.value = currentVendor;
           productManual.value = currentProduct;
         });
 
       usbSelect.addEventListener("change", function () {
         if (usbSelect.value === "__manual__" || usbSelect.value === "__none__") {
-          manualFields.hidden = false;
+          showManualFields(true);
           vendorInput.value = "";
           productInput.value = "";
         } else {
-          manualFields.hidden = true;
+          showManualFields(false);
           var parts = usbSelect.value.split(":");
           vendorInput.value = parts[0];
           productInput.value = parts[1];

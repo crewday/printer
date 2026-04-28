@@ -115,6 +115,12 @@ def discover_usb_devices() -> list[dict[str, object]]:
         devices = usb.core.find(find_all=True)
         results: list[dict[str, object]] = []
         for dev in devices:
+            if not any(
+                iface.bInterfaceClass == 7
+                for cfg in dev
+                for iface in cfg
+            ):
+                continue
             try:
                 manufacturer = usb.core.util.get_string(dev, dev.iManufacturer) if dev.iManufacturer else ""
             except Exception:

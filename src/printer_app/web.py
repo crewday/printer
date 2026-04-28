@@ -11,6 +11,8 @@ from typing import Annotated
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
+from hashlib import sha1
+
 from fastapi import Body, Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -95,6 +97,21 @@ app.mount(
     name="static",
 )
 templates = Jinja2Templates(directory=Path(__file__).with_name("templates"))
+_static_dir = Path(__file__).with_name("static")
+
+
+def _cache_bust(path: str) -> str:
+    """Append an mtime-based query string to a static asset path."""
+    rel = path.removeprefix("/static/")
+    file = _static_dir / rel
+    try:
+        h = sha1(str(file.stat().st_mtime).encode()).hexdigest()[:8]
+    except FileNotFoundError:
+        h = "0"
+    return f"{path}?v={h}"
+
+
+templates.env.filters["cache_bust"] = _cache_bust
 security = HTTPBasic(auto_error=False)
 
 
