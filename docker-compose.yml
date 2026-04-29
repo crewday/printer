@@ -13,19 +13,25 @@ services:
       PRINTER_UI_USERNAME: admin
       PRINTER_UI_PASSWORD: admin
       PRINTER_CONFIG_SECRET_KEY: local-dev-printer-config-secret-key
-      # Process-local timezone for container code that asks the OS for local time.
-      # Receipt task times come from timezone in /config/printer.yaml.
       TZ: ${TZ:-Asia/Dubai}
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
+      CUPS_ENABLED: ${CUPS_ENABLED:-false}
+      CUPS_LPADMIN_NAME: ${CUPS_LPADMIN_NAME:-}
+      CUPS_LPADMIN_DESC: ${CUPS_LPADMIN_DESC:-}
+      CUPS_LPADMIN_PRINTER: ${CUPS_LPADMIN_PRINTER:-}
+      CUPS_SERVER: ${CUPS_SERVER:-}
     ports:
       - "8087:8080"
     # Uncomment for USB printer access:
     # devices:
     #   - /dev/bus/usb:/dev/bus/usb
-    # Uncomment for CUPS printer access (requires CUPS on host):
+    # Mount host CUPS socket (alternative to CUPS_ENABLED=true):
     # volumes:
     #   - /var/run/cups/cups.sock:/var/run/cups/cups.sock
+    # Persist container CUPS config when CUPS_ENABLED=true:
+    # volumes:
+    #   - cups-config:/etc/cups
 
   dev:
     build: .
@@ -41,17 +47,26 @@ services:
       PRINTER_UI_USERNAME: admin
       PRINTER_UI_PASSWORD: admin
       PRINTER_CONFIG_SECRET_KEY: local-dev-printer-config-secret-key
-      # Process-local timezone for container code that asks the OS for local time.
-      # Receipt task times come from timezone in /config/printer.yaml.
       TZ: ${TZ:-Asia/Dubai}
       PRINTER_HOST: ${PRINTER_HOST:-192.168.20.15}
       CREWDAY_API_TOKEN: ${CREWDAY_API_TOKEN:-}
+      CUPS_ENABLED: ${CUPS_ENABLED:-false}
+      CUPS_LPADMIN_NAME: ${CUPS_LPADMIN_NAME:-}
+      CUPS_LPADMIN_DESC: ${CUPS_LPADMIN_DESC:-}
+      CUPS_LPADMIN_PRINTER: ${CUPS_LPADMIN_PRINTER:-}
+      CUPS_SERVER: ${CUPS_SERVER:-}
     ports:
       - "8087:8080"
     # Uncomment for USB printer access:
     # devices:
     #   - /dev/bus/usb:/dev/bus/usb
-    # Uncomment for CUPS printer access (requires CUPS on host):
+    # Mount host CUPS socket (alternative to CUPS_ENABLED=true):
     # volumes:
     #   - /var/run/cups/cups.sock:/var/run/cups/cups.sock
+    # Persist container CUPS config when CUPS_ENABLED=true:
+    # volumes:
+    #   - cups-config:/etc/cups
     command: ["uv", "run", "--group", "dev", "watchfiles", "uv run python -m printer_app serve --host 0.0.0.0 --port 8080", "/app/src", "/config"]
+
+# volumes:
+#   cups-config:

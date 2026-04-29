@@ -155,4 +155,39 @@ printers:
     cut: true
 ```
 
-The printer must be configured as a raw queue in CUPS. For Docker access to a host CUPS daemon, mount the CUPS socket: `-v /var/run/cups/cups.sock:/var/run/cups/cups.sock` and set `CUPS_SERVER=/var/run/cups/cups.sock`.
+The printer must be configured as a raw queue in CUPS. There are two ways to provide CUPS to the container:
+
+#### Option A: Use the host's CUPS daemon
+
+Mount the CUPS socket and point the container client at it:
+
+```sh
+docker compose run --rm -v /var/run/cups/cups.sock:/var/run/cups/cups.sock \
+  -e CUPS_SERVER=/var/run/cups/cups.sock printer uv run python -m printer_app print-test --config /config/printer.yaml
+```
+
+#### Option B: Run CUPS inside the container
+
+Set `CUPS_ENABLED=true` to start the CUPS daemon automatically on container startup. Use `CUPS_LPADMIN_*` variables to auto-configure a printer queue, or mount a custom `/etc/cups` for full control.
+
+```sh
+CUPS_ENABLED=true \
+CUPS_LPADMIN_NAME=TM-T20II \
+CUPS_LPADMIN_PRINTER="socket://192.168.20.15:9100" \
+docker compose up dev
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CUPS_ENABLED` | `false` | Start the CUPS daemon inside the container |
+| `CUPS_LPADMIN_NAME` | _(empty)_ | Queue name passed to `lpadmin -p` |
+| `CUPS_LPADMIN_DESC` | _(empty)_ | Queue description passed to `lpadmin -D` |
+| `CUPS_LPADMIN_PRINTER` | _(empty)_ | Device URI passed to `lpadmin -v` (e.g. `socket://host:port`, `usb://Vendor/Model`) |
+| `CUPS_SERVER` | _(empty)_ | Override the CUPS server address for the `lp` / `lpstat` client commands |
+
+To persist CUPS configuration across container restarts, mount a named volume at `/etc/cups`:
+
+```yaml
+volumes:
+  - cups-config:/etc/cups
+```
