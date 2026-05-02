@@ -4,6 +4,12 @@
 
 Docker-hosted Python service for printing enabled Crewday workers' task lists to a thermal receipt printer.
 
+Pre-built images are published to [ghcr.io/crewday/printer](https://github.com/crewday/printer/pkgs/container/printer). Pull with:
+
+```sh
+docker pull ghcr.io/crewday/printer:latest
+```
+
 The first slice is a containerized ESC/POS probe that can dry-run render a sample receipt or send it to a printer. Three transport backends are supported:
 
 | Type | Config `type` | Connection |
