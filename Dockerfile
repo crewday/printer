@@ -34,4 +34,4 @@ COPY tests ./tests
 RUN uv sync --group dev
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["uv", "run", "python", "-m", "printer_app", "--help"]
+CMD ["uv", "run", "python", "-m", "printer_app", "serve", "--host", "0.0.0.0", "--port", "8080"]
