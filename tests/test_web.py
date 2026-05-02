@@ -449,3 +449,176 @@ def test_calibration_wizard_prints_compact_batch_with_one_cut_at_end(
     assert b"density=10 speed=4" in payload
     assert payload.count(b"\x1dVA\x03") == 1
     assert payload.endswith(b"\x1dVA\x03")
+
+
+def test_create_token_returns_full_token(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/api/tokens/create",
+        json={"name": "Home Assistant", "scope": "print"},
+        auth=("admin", "admin"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Home Assistant"
+    assert body["scope"] == "print"
+    assert body["token"].startswith("cpt_")
+    assert body["token_prefix"].startswith("cpt_")
+    assert body["created_at"] != ""
+    assert len(body["token"]) == len("cpt_") + 64
+
+
+def test_api_print_accepts_bearer_token(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    sent_payloads: list[bytes] = []
+
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+    monkeypatch.setattr(
+        web,
+        "send_to_printer",
+        lambda payload, printer: sent_payloads.append(payload),
+    )
+
+    client = TestClient(web.app)
+    create_resp = client.post(
+        "/api/tokens/create",
+        json={"name": "HA", "scope": "print"},
+        auth=("admin", "admin"),
+    )
+    token = create_resp.json()["token"]
+
+    print_resp = client.post(
+        "/api/receipts/print",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert print_resp.status_code == 200
+    assert print_resp.json()["count"] == 2
+    assert len(sent_payloads) == 1
+
+
+def test_api_print_rejects_invalid_bearer_token(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/api/receipts/print",
+        headers={"Authorization": "Bearer cpt_invalid"},
+    )
+
+    assert response.status_code == 401
+    assert "invalid" in response.json()["detail"].lower()
+
+
+def test_revoke_token_removes_token(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    create_resp = client.post(
+        "/api/tokens/create",
+        json={"name": "HA", "scope": "print"},
+        auth=("admin", "admin"),
+    )
+    prefix = create_resp.json()["token_prefix"]
+
+    revoke_resp = client.post(
+        f"/tokens/{prefix}/revoke",
+        auth=("admin", "admin"),
+        follow_redirects=False,
+    )
+    assert revoke_resp.status_code == 303
+
+    list_resp = client.get("/api/tokens", auth=("admin", "admin"))
+    assert all(t["token_prefix"] != prefix for t in list_resp.json())
+
+
+def test_token_encrypts_hash_at_rest(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+    monkeypatch.setenv("PRINTER_CONFIG_SECRET_KEY", "test-secret-key")
+    monkeypatch.setattr(
+        web,
+        "send_to_printer",
+        lambda payload, printer: None,
+    )
+
+    client = TestClient(web.app)
+    create_resp = client.post(
+        "/api/tokens/create",
+        json={"name": "HA", "scope": "print"},
+        auth=("admin", "admin"),
+    )
+    token = create_resp.json()["token"]
+
+    stored = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert stored["api_tokens"][0]["token_hash"].startswith("enc:v1:")
+
+    from printer_app.config import load_config
+
+    reloaded = load_config(config_path)
+    assert len(reloaded.api_tokens) == 1
+    assert reloaded.api_tokens[0].name == "HA"
+
+    print_resp = client.post(
+        "/api/receipts/print",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert print_resp.status_code == 200
+
+
+def test_token_scope_restricts_to_print_endpoint(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    create_resp = client.post(
+        "/api/tokens/create",
+        json={"name": "HA", "scope": "print"},
+        auth=("admin", "admin"),
+    )
+    token = create_resp.json()["token"]
+
+    template_resp = client.get(
+        "/api/template/default",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert template_resp.status_code == 401

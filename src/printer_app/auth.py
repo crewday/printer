@@ -32,3 +32,29 @@ def configured_password_hash(config_hash: str | None) -> str | None:
     if env_password:
         return hash_password(env_password, salt="env")
     return config_hash
+
+
+API_TOKEN_PREFIX = "cpt_"
+
+
+def generate_api_token() -> tuple[str, str, str]:
+    raw = secrets.token_hex(32)
+    token = f"{API_TOKEN_PREFIX}{raw}"
+    prefix = token[:12]
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    return token, prefix, token_hash
+
+
+def verify_api_token(token: str, stored_hash: str) -> bool:
+    computed = hashlib.sha256(token.encode()).hexdigest()
+    return hmac.compare_digest(computed, stored_hash)
+
+
+SCOPE_ALLOWED_PATHS: dict[str, frozenset[str]] = {
+    "print": frozenset({"/api/receipts/print"}),
+}
+
+
+def scope_allows_path(scope: str, method: str, path: str) -> bool:
+    allowed = SCOPE_ALLOWED_PATHS.get(scope, frozenset())
+    return path in allowed and method.upper() == "POST"

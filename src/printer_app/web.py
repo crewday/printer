@@ -21,7 +21,14 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from printer_app import escpos
-from printer_app.auth import configured_password_hash, hash_password, verify_password
+from printer_app.auth import (
+    configured_password_hash,
+    generate_api_token,
+    hash_password,
+    scope_allows_path,
+    verify_api_token,
+    verify_password,
+)
 from printer_app.config import (
     config_path_from_env,
     config_to_raw,
@@ -158,6 +165,32 @@ def require_auth(
             detail="invalid credentials",
             headers={"WWW-Authenticate": "Basic"},
         )
+
+
+def require_api_auth(
+    request: Request,
+    credentials: Annotated[HTTPBasicCredentials | None, Depends(security)],
+) -> None:
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        token = authorization[7:]
+        config = load_config(config_path_from_env())
+        for stored in config.api_tokens:
+            if verify_api_token(token, stored.token_hash):
+                if not scope_allows_path(
+                    stored.scope, request.method, request.url.path
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"token scope '{stored.scope}' does not allow this endpoint",
+                    )
+                return
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid or expired API token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    require_auth(credentials)
 
 
 def _resolve_printer(config: AppConfig, name: str) -> PrinterConfig:
@@ -607,12 +640,13 @@ async def save_workers(
 
 @app.post("/api/receipts/print")
 def print_receipts_api(
-    _: Annotated[None, Depends(require_auth)],
-    request: Annotated[PrintReceiptsRequest | None, Body()] = None,
+    request: Request,
+    _: Annotated[None, Depends(require_api_auth)],
+    request_body: Annotated[PrintReceiptsRequest | None, Body()] = None,
     workers: Annotated[list[str] | None, Query()] = None,
 ) -> dict[str, object]:
     config = load_config(config_path_from_env())
-    worker_names = _requested_worker_names(request, workers)
+    worker_names = _requested_worker_names(request_body, workers)
     try:
         result = _print_worker_receipts(config, worker_names)
     except ValueError as exc:
@@ -681,6 +715,86 @@ def template_default(
     _: Annotated[None, Depends(require_auth)],
 ) -> dict[str, object]:
     return _template_to_payload(default_receipt_template())
+
+
+class CreateTokenRequest(BaseModel):
+    name: str
+    scope: str = "print"
+
+
+@app.get("/api/tokens")
+def list_tokens_api(
+    _: Annotated[None, Depends(require_auth)],
+) -> list[dict[str, object]]:
+    config = load_config(config_path_from_env())
+    return [
+        {
+            "name": t.name,
+            "token_prefix": t.token_prefix,
+            "scope": t.scope,
+            "created_at": t.created_at,
+        }
+        for t in config.api_tokens
+    ]
+
+
+@app.post("/api/tokens/create")
+def create_token_api(
+    _: Annotated[None, Depends(require_auth)],
+    payload: CreateTokenRequest,
+) -> dict[str, object]:
+    token_name = payload.name.strip()
+    if not token_name:
+        raise HTTPException(status_code=400, detail="token name is required")
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    token, prefix, token_hash = generate_api_token()
+    now = datetime.now(ZoneInfo("UTC")).isoformat()
+    new_token = {
+        "name": token_name,
+        "token_prefix": prefix,
+        "token_hash": token_hash,
+        "scope": payload.scope,
+        "created_at": now,
+    }
+    api_tokens = list(raw.get("api_tokens") or [])
+    api_tokens.append(new_token)
+    raw["api_tokens"] = api_tokens
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _record(f"Created API token {token_name!r} ({payload.scope}).")
+    return {
+        "name": token_name,
+        "token_prefix": prefix,
+        "scope": payload.scope,
+        "created_at": now,
+        "token": token,
+    }
+
+
+@app.post("/tokens/{prefix}/revoke")
+def revoke_token(
+    prefix: str,
+    _: Annotated[None, Depends(require_auth)],
+) -> RedirectResponse:
+    config = load_config(config_path_from_env())
+    raw = config_to_raw(config)
+    tokens = list(raw.get("api_tokens") or [])
+    original_len = len(tokens)
+    tokens = [t for t in tokens if t.get("token_prefix") != prefix]
+    if len(tokens) == original_len:
+        _record(f"Token {prefix!r} not found for revocation.")
+        return RedirectResponse("/", status_code=303)
+    raw["api_tokens"] = tokens
+    try:
+        write_raw_config(config_path_from_env(), raw)
+    except ValueError as exc:
+        _record(f"Token was not revoked: {exc}")
+    else:
+        _record(f"Revoked API token {prefix!r}.")
+    return RedirectResponse("/", status_code=303)
 
 
 def _preview_for_first_worker(

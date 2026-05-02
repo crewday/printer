@@ -91,6 +91,15 @@ class WorkerConfig:
 
 
 @dataclass(frozen=True)
+class ApiTokenConfig:
+    name: str
+    token_prefix: str
+    token_hash: str
+    scope: str = "print"
+    created_at: str = ""
+
+
+@dataclass(frozen=True)
 class AppConfig:
     ui: UIConfig
     printers: tuple[PrinterConfig, ...]
@@ -99,6 +108,7 @@ class AppConfig:
     receipt_template: ReceiptTemplateConfig
     timezone: str
     workers: tuple[WorkerConfig, ...]
+    api_tokens: tuple[ApiTokenConfig, ...] = ()
 
     def printer_by_name(self, name: str) -> PrinterConfig | None:
         for printer in self.printers:

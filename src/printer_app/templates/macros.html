@@ -528,3 +528,74 @@
   </div>
 </section>
 {% endmacro %}
+
+
+{% macro api_tokens_panel(config) %}
+<section class="panel" id="api-tokens-panel">
+  {% call panel_head("API Tokens", "External access") %}
+  {% endcall %}
+  <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Tokens allow external services to trigger prints without UI credentials. Use <code>Authorization: Bearer &lt;token&gt;</code> to authenticate.</p>
+
+  {% if config.api_tokens %}
+  <div class="token-list">
+    {% for token in config.api_tokens %}
+    <div class="token-card">
+      <div class="token-card__info">
+        <strong class="token-card__name">{{ token.name }}</strong>
+        <span class="token-card__meta">
+          <code>{{ token.token_prefix }}&hellip;</code>
+          <span class="chip chip--sky chip--sm"><span class="dot dot--sky"></span>{{ token.scope }}</span>
+          {% if token.created_at %}<span>{{ token.created_at[:10] }}</span>{% endif %}
+        </span>
+      </div>
+      <form method="post" action="/tokens/{{ token.token_prefix | urlencode }}/revoke" style="display:inline">
+        <button type="submit" class="btn btn--ghost btn--sm">Revoke</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <span class="empty__title">No API tokens</span>
+    <span class="empty__sub">Create a token to allow external services like Home Assistant to trigger prints.</span>
+  </div>
+  {% endif %}
+
+  <div id="new-token-display" hidden>
+    <hr class="panel__divider">
+    <div class="new-token-banner">
+      <strong>Token created</strong>
+      <p>Copy this token now. It will not be shown again.</p>
+      <div class="new-token-box">
+        <code id="new-token-value"></code>
+        <button type="button" class="btn btn--ghost btn--sm" id="copy-token-btn">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <hr class="panel__divider">
+
+  <details class="helper">
+    <summary>Create token</summary>
+    <form class="form" id="create-token-form">
+      <div class="form__row">
+        <label class="field">
+          <span class="field__label">Name</span>
+          <input class="input" name="token_name" placeholder="e.g. Home Assistant" required>
+          <span class="field__hint">A label to identify this token.</span>
+        </label>
+        <label class="field">
+          <span class="field__label">Scope</span>
+          <select class="input" name="token_scope">
+            <option value="print" selected>print</option>
+          </select>
+          <span class="field__hint">What the token is allowed to do.</span>
+        </label>
+      </div>
+      <div class="btn-group btn-group--end">
+        <button type="submit" class="btn btn--moss">Create token</button>
+      </div>
+    </form>
+  </details>
+</section>
+{% endmacro %}

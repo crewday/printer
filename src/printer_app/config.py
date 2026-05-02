@@ -13,6 +13,7 @@ from printer_app import escpos
 from printer_app.cron import validate_cron_or_empty
 from printer_app.models import (
     AppConfig,
+    ApiTokenConfig,
     CrewdayConfig,
     PrinterConfig,
     PrintScheduleConfig,
@@ -132,6 +133,7 @@ def default_config() -> dict[str, Any]:
                 "printer": "Default",
             }
         ],
+        "api_tokens": [],
     }
 
 
@@ -157,6 +159,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     receipt_template_raw = raw.get("receipt_template") or DEFAULT_RECEIPT_TEMPLATE
     printers_raw = raw.get("printers") or []
     workers_raw = raw.get("workers") or []
+    api_tokens_raw = raw.get("api_tokens") or []
     timezone = str(
         raw.get("timezone") or os.environ.get("PRINTER_TIMEZONE") or "Asia/Dubai"
     )
@@ -198,6 +201,16 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         )
         for worker in workers_raw
     )
+    api_tokens = tuple(
+        ApiTokenConfig(
+            name=str(t.get("name", "")),
+            token_prefix=str(t.get("token_prefix", "")),
+            token_hash=decrypt_secret(t.get("token_hash", "")) or "",
+            scope=str(t.get("scope", "print")),
+            created_at=str(t.get("created_at", "")),
+        )
+        for t in api_tokens_raw
+    )
     return AppConfig(
         ui=ui,
         crewday=crewday,
@@ -206,6 +219,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         timezone=timezone,
         printers=printers,
         workers=workers,
+        api_tokens=api_tokens,
     )
 
 
@@ -398,6 +412,7 @@ def config_to_raw(config: AppConfig) -> dict[str, Any]:
         },
         "printers": [asdict(printer) for printer in config.printers],
         "workers": [asdict(worker) for worker in config.workers],
+        "api_tokens": [asdict(t) for t in config.api_tokens],
     }
 
 
@@ -413,6 +428,11 @@ def encrypt_raw_config(raw: dict[str, Any]) -> dict[str, Any]:
         crewday["api_token"] = _encrypt_config_value(crewday["api_token"])
     stored["ui"] = ui
     stored["crewday"] = crewday
+    api_tokens = list(stored.get("api_tokens") or [])
+    for token_entry in api_tokens:
+        if token_entry.get("token_hash"):
+            token_entry["token_hash"] = _encrypt_config_value(token_entry["token_hash"])
+    stored["api_tokens"] = api_tokens
     return stored
 
 

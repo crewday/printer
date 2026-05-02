@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "macros.html" import panel_head, activity_log, printers_panel, crewday_panel, workers_panel, access_panel, schedule_panel, composer_panel, home_preview %}
+{% from "macros.html" import panel_head, activity_log, printers_panel, crewday_panel, workers_panel, access_panel, api_tokens_panel, schedule_panel, composer_panel, home_preview %}
 
 {% block topbar_heading %}
   <h1 class="page-title">Printer <em>console</em></h1>
@@ -12,6 +12,7 @@
     {{ crewday_panel(config, secret_key_configured) }}
     {{ workers_panel(config, crewday_workers, crewday_worker_error) }}
     {{ access_panel(config) }}
+    {{ api_tokens_panel(config) }}
     {{ schedule_panel(config) }}
   </div>
 
@@ -37,6 +38,53 @@
         target.focus();
       });
     });
+  })();
+</script>
+<script>
+  (function () {
+    var form = document.getElementById("create-token-form");
+    var display = document.getElementById("new-token-display");
+    var valueEl = document.getElementById("new-token-value");
+    var copyBtn = document.getElementById("copy-token-btn");
+    if (!form) return;
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var name = form.elements.token_name.value;
+      var scope = form.elements.token_scope.value;
+      if (!name.trim()) return;
+
+      fetch("/api/tokens/create", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name, scope: scope }),
+      })
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || r.statusText); });
+          return r.json();
+        })
+        .then(function (data) {
+          valueEl.textContent = data.token;
+          display.hidden = false;
+          form.elements.token_name.value = "";
+          display.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        })
+        .catch(function (err) {
+          alert("Failed to create token: " + err.message);
+        });
+    });
+
+    if (copyBtn) {
+      copyBtn.addEventListener("click", function () {
+        var text = valueEl.textContent;
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(function () {
+          copyBtn.textContent = "Copied";
+          setTimeout(function () { copyBtn.textContent = "Copy"; }, 2000);
+        });
+      });
+    }
   })();
 </script>
 <script src="{{ '/static/template-editor.js' | cache_bust }}" defer></script>
