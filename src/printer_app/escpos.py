@@ -61,6 +61,16 @@ def select_print_speed(speed: int) -> bytes:
     return command(GS, b"(K", b"\x02\x00", b"\x32", bytes([speed]))
 
 
+def set_line_spacing(n: int) -> bytes:
+    if not 0 <= n <= 255:
+        raise ValueError("line spacing must be between 0 and 255")
+    return command(ESC, b"3", bytes([n]))
+
+
+def reset_line_spacing() -> bytes:
+    return command(ESC, b"2")
+
+
 def select_code_page(code_page: str) -> bytes:
     return command(ESC, b"t", bytes([CODE_PAGES[code_page]]))
 

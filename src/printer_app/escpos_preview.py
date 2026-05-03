@@ -72,9 +72,10 @@ def render_payload_to_image(
     width_multiplier = 1
     height_multiplier = 1
     y = 0
-    strips: list[tuple[int, Image.Image]] = []
+    strips: list[tuple[int, Image.Image, int]] = []
     text_buffer = bytearray()
     active_cp = code_page
+    line_spacing: int | None = None
 
     def flush_text(*, force_line_feed: bool = False) -> None:
         nonlocal y, text_buffer
@@ -101,8 +102,9 @@ def render_payload_to_image(
             width_multiplier,
         )
         x = _aligned_x(width_dots, content_width, alignment)
-        strips.append((x, strip))
-        y += strip.height
+        advance = line_spacing if line_spacing is not None else strip.height
+        strips.append((x, strip, advance))
+        y += advance
 
     i = 0
     while i < len(payload):
@@ -123,6 +125,15 @@ def render_payload_to_image(
                 width_multiplier = 1
                 height_multiplier = 1
                 active_cp = code_page
+                line_spacing = None
+                i += 2
+                continue
+            if command == 0x33 and i + 2 < len(payload):
+                line_spacing = payload[i + 2]
+                i += 3
+                continue
+            if command == 0x32:
+                line_spacing = None
                 i += 2
                 continue
             if command == 0x61 and i + 2 < len(payload):
@@ -173,7 +184,7 @@ def render_payload_to_image(
                     payload[data_start:data_end], width_bytes, height
                 )
                 x = _aligned_x(width_dots, raster.width, alignment)
-                strips.append((x, raster))
+                strips.append((x, raster, raster.height))
                 y += raster.height
                 i = data_end
                 continue
@@ -198,9 +209,9 @@ def render_payload_to_image(
     height = max(y, 1)
     preview = Image.new("L", (width_dots, height), 255)
     cursor_y = 0
-    for x, strip in strips:
+    for x, strip, advance in strips:
         preview.paste(strip, (x, cursor_y))
-        cursor_y += strip.height
+        cursor_y += advance
     return preview
 
 

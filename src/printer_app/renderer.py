@@ -680,6 +680,16 @@ def _logo_bytes(columns: int, scale: float = 1.0) -> bytes:
 
 
 TABLE_CODE_PAGE = "cp437"
+TABLE_LINE_SPACING = FONT_A_CELL_HEIGHT_DOTS
+
+
+def _table_block(lines: list[str], tcp: str) -> bytes:
+    output = escpos.set_line_spacing(TABLE_LINE_SPACING)
+    for line in lines:
+        output += escpos.text(line, tcp)
+    output += escpos.reset_line_spacing()
+    output += escpos.text("", tcp)
+    return output
 
 
 def render_table_test(printer: PrinterConfig) -> bytes:
@@ -725,18 +735,18 @@ def render_table_test(printer: PrinterConfig) -> bytes:
             ColumnDef(col_time, "right"),
         ]
     )
-    output += escpos.text(t1.top_border(), tcp)
-    for line in t1.row(["#", "Task", "Priority", "Time"], align_override="center"):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t1.separator(), tcp)
-    for line in t1.row(["1", "Clean Room 101", "normal", "08:00"]):
-        output += escpos.text(line, tcp)
-    for line in t1.row(["2", "Inspect Pool Area", "high", "09:30"]):
-        output += escpos.text(line, tcp)
-    for line in t1.row(["3", "Garden Maintenance", "normal", "11:00"]):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t1.bottom_border(), tcp)
-    output += escpos.text("", tcp)
+    output += _table_block(
+        [
+            t1.top_border(),
+            *t1.row(["#", "Task", "Priority", "Time"], align_override="center"),
+            t1.separator(),
+            *t1.row(["1", "Clean Room 101", "normal", "08:00"]),
+            *t1.row(["2", "Inspect Pool Area", "high", "09:30"]),
+            *t1.row(["3", "Garden Maintenance", "normal", "11:00"]),
+            t1.bottom_border(),
+        ],
+        tcp,
+    )
 
     output += escpos.bold(True)
     output += escpos.text("Double-line 3-column:", tcp)
@@ -751,16 +761,17 @@ def render_table_test(printer: PrinterConfig) -> bytes:
         ],
         style=DOUBLE,
     )
-    output += escpos.text(t2.top_border(), tcp)
-    for line in t2.row(["#", "Task", "Time"], align_override="center"):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t2.separator(), tcp)
-    for line in t2.row(["1", "Clean Room 101", "08:00"]):
-        output += escpos.text(line, tcp)
-    for line in t2.row(["2", "Inspect Pool Area", "09:30"]):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t2.bottom_border(), tcp)
-    output += escpos.text("", tcp)
+    output += _table_block(
+        [
+            t2.top_border(),
+            *t2.row(["#", "Task", "Time"], align_override="center"),
+            t2.separator(),
+            *t2.row(["1", "Clean Room 101", "08:00"]),
+            *t2.row(["2", "Inspect Pool Area", "09:30"]),
+            t2.bottom_border(),
+        ],
+        tcp,
+    )
 
     output += escpos.bold(True)
     output += escpos.text("Word wrap in cells:", tcp)
@@ -775,26 +786,26 @@ def render_table_test(printer: PrinterConfig) -> bytes:
             ColumnDef(col_dur, "right"),
         ]
     )
-    output += escpos.text(t3.top_border(), tcp)
-    for line in t3.row(
-        ["#", "Description", "Dur"], align_override="center"
-    ):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t3.separator(), tcp)
-    for line in t3.row(
-        ["1", "Clean and prepare the main lobby entrance area", "30 min"]
-    ):
-        output += escpos.text(line, tcp)
-    for line in t3.row(
-        ["2", "Fix the leaky faucet in upstairs bathroom 2B", "15 min"]
-    ):
-        output += escpos.text(line, tcp)
-    for line in t3.row(
-        ["3", "Short task", "5 min"]
-    ):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t3.bottom_border(), tcp)
-    output += escpos.text("", tcp)
+    output += _table_block(
+        [
+            t3.top_border(),
+            *t3.row(
+                ["#", "Description", "Dur"], align_override="center"
+            ),
+            t3.separator(),
+            *t3.row(
+                ["1", "Clean and prepare the main lobby entrance area", "30 min"]
+            ),
+            *t3.row(
+                ["2", "Fix the leaky faucet in upstairs bathroom 2B", "15 min"]
+            ),
+            *t3.row(
+                ["3", "Short task", "5 min"]
+            ),
+            t3.bottom_border(),
+        ],
+        tcp,
+    )
 
     output += escpos.bold(True)
     output += escpos.text("Numeric alignment:", tcp)
@@ -812,23 +823,22 @@ def render_table_test(printer: PrinterConfig) -> bytes:
             ColumnDef(col_sub, "right"),
         ]
     )
-    output += escpos.text(t4.top_border(), tcp)
-    for line in t4.row(
-        ["Item", "Qty", "Price", "Sub"], align_override="center"
-    ):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t4.separator(), tcp)
-    for line in t4.row(["Towels", "2", "$3.50", "$7.00"]):
-        output += escpos.text(line, tcp)
-    for line in t4.row(["Soap", "5", "$1.20", "$6.00"]):
-        output += escpos.text(line, tcp)
-    for line in t4.row(["Shampoo", "3", "$2.80", "$8.40"]):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t4.separator(), tcp)
-    for line in t4.row(["TOTAL", "", "", "$21.40"]):
-        output += escpos.text(line, tcp)
-    output += escpos.text(t4.bottom_border(), tcp)
-    output += escpos.text("", tcp)
+    output += _table_block(
+        [
+            t4.top_border(),
+            *t4.row(
+                ["Item", "Qty", "Price", "Sub"], align_override="center"
+            ),
+            t4.separator(),
+            *t4.row(["Towels", "2", "$3.50", "$7.00"]),
+            *t4.row(["Soap", "5", "$1.20", "$6.00"]),
+            *t4.row(["Shampoo", "3", "$2.80", "$8.40"]),
+            t4.separator(),
+            *t4.row(["TOTAL", "", "", "$21.40"]),
+            t4.bottom_border(),
+        ],
+        tcp,
+    )
 
     output += escpos.select_code_page(cp)
     output += escpos.select_font("a")
