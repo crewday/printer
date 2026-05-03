@@ -5,10 +5,17 @@ from io import BytesIO
 
 from PIL import Image, ImageDraw, ImageFont
 
+from printer_app.escpos import CODE_PAGES
+
 DEFAULT_FONT_A_CELL_WIDTH_DOTS = 12
 DEFAULT_FONT_A_CELL_HEIGHT_DOTS = 24
 DEFAULT_FONT_B_CELL_WIDTH_DOTS = 9
 DEFAULT_FONT_B_CELL_HEIGHT_DOTS = 20
+
+_CODE_PAGE_FROM_INDEX = {v: k for k, v in CODE_PAGES.items()}
+_BOX_CHARS_HORIZONTAL = frozenset(
+    "─═┬┴┼╦╩╬├┤╠╣┌┐└┘╔╗╚╝╒╕╘╛╞╡╤╧╪╫╓╖╙╜"
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +31,7 @@ class PreviewFont:
     bold: ImageFont.ImageFont
     cell_width_dots: int
     cell_height_dots: int
+    midline_y: int
 
 
 def render_payload_to_png(
@@ -66,12 +74,13 @@ def render_payload_to_image(
     y = 0
     strips: list[tuple[int, Image.Image]] = []
     text_buffer = bytearray()
+    active_cp = code_page
 
     def flush_text(*, force_line_feed: bool = False) -> None:
         nonlocal y, text_buffer
         if not text_buffer and not force_line_feed:
             return
-        line = bytes(text_buffer).decode(code_page, errors="replace")
+        line = bytes(text_buffer).decode(active_cp, errors="replace")
         text_buffer.clear()
         preview_font = fonts[font_name]
         strip = _text_line_to_image(
@@ -83,6 +92,7 @@ def render_payload_to_image(
             width_multiplier,
             height_multiplier,
             underline,
+            preview_font.midline_y,
         )
         content_width = _text_content_width(
             line,
@@ -112,6 +122,7 @@ def render_payload_to_image(
                 font_name = "a"
                 width_multiplier = 1
                 height_multiplier = 1
+                active_cp = code_page
                 i += 2
                 continue
             if command == 0x61 and i + 2 < len(payload):
@@ -135,6 +146,9 @@ def render_payload_to_image(
                 i += 3
                 continue
             if command == 0x74 and i + 2 < len(payload):
+                active_cp = _CODE_PAGE_FROM_INDEX.get(
+                    payload[i + 2], code_page
+                )
                 i += 3
                 continue
 
@@ -207,14 +221,33 @@ def _preview_fonts() -> dict[str, PreviewFont]:
             bold=bold_a,
             cell_width_dots=DEFAULT_FONT_A_CELL_WIDTH_DOTS,
             cell_height_dots=DEFAULT_FONT_A_CELL_HEIGHT_DOTS,
+            midline_y=_measure_midline(font_a, DEFAULT_FONT_A_CELL_HEIGHT_DOTS),
         ),
         "b": PreviewFont(
             regular=font_b,
             bold=bold_b,
             cell_width_dots=DEFAULT_FONT_B_CELL_WIDTH_DOTS,
             cell_height_dots=DEFAULT_FONT_B_CELL_HEIGHT_DOTS,
+            midline_y=_measure_midline(font_b, DEFAULT_FONT_B_CELL_HEIGHT_DOTS),
         ),
     }
+
+
+def _measure_midline(font: ImageFont.ImageFont, cell_height: int) -> int:
+    try:
+        probe = Image.new("L", (24, cell_height), 255)
+        draw = ImageDraw.Draw(probe)
+        draw.text((0, 1), "─", font=font, fill=0)
+        best_y = cell_height // 2
+        best_count = 0
+        for y in range(cell_height):
+            count = sum(1 for x in range(24) if probe.getpixel((x, y)) < 128)
+            if count > best_count:
+                best_count = count
+                best_y = y
+        return best_y if best_count > 0 else cell_height // 2
+    except Exception:
+        return cell_height // 2
 
 
 def _text_line_to_image(
@@ -226,6 +259,7 @@ def _text_line_to_image(
     width_multiplier: int,
     height_multiplier: int,
     underline: int = 0,
+    midline_y: int = 0,
 ) -> Image.Image:
     max_chars = _preview_text_columns(columns, cell_width_dots, width_multiplier)
     base = Image.new(
@@ -246,6 +280,19 @@ def _text_line_to_image(
                 fill=0,
                 width=underline,
             )
+    if midline_y > 0:
+        for col, char in enumerate(line[:max_chars]):
+            if char in _BOX_CHARS_HORIZONTAL:
+                x_start = col * cell_width_dots
+                draw.line(
+                    (
+                        x_start,
+                        midline_y,
+                        x_start + cell_width_dots - 1,
+                        midline_y,
+                    ),
+                    fill=0,
+                )
     if width_multiplier == 1 and height_multiplier == 1:
         return base
     return base.resize(

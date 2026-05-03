@@ -1,5 +1,5 @@
 ui:
-  username: enc:v1:gAAAAABp8OTuclhpYlTmCh4wPrAn4oUIoCKrwgvxEfEA_AStQ3-zP6JuqStm3KeXpqUgJNo1y4072IsNgjnSoBKe405G7ub5pg==
+  username: enc:v1:gAAAAABp9flTVva-9ADha7e3H2n4MkQlneyrU64FBNL5cSMBBSTUfphDVwAqYJGDB0TvrzIZVnRyoTUXbGrUPQgqzJr_2SM3Tg==
   password_hash: null
 crewday:
   source: mock
@@ -140,3 +140,9 @@ workers:
   crewday_user_id: null
   enabled: true
   printer: Default
+api_tokens:
+- name: Home Assistant
+  token_prefix: cpt_466dd5be
+  token_hash: enc:v1:gAAAAABp9flT948Jo-HhxD2lVj5EU5bc65xaMuyFZl5FW0FZPyZtr9sMk8BbjM3XlJLkIKEvW9sI8JFjISdu5wFpIZzNaWm2f8W4x-BAHNmv_lrjH4UsHTFzNMf0T1pqWUaOcStx6Q1KbWbwm-cgSRKf8V8OpUA5FCZmW3cLbMEaGfL-L5USK8g=
+  scope: print
+  created_at: '2026-05-02T13:17:07.619561+00:00'

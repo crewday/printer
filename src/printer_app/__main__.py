@@ -9,7 +9,12 @@ from zoneinfo import ZoneInfo
 
 from printer_app.config import config_path_from_env, ensure_config, load_config
 from printer_app.models import WorkerConfig
-from printer_app.renderer import receipt_text_preview, render_black_test, render_receipt
+from printer_app.renderer import (
+    receipt_text_preview,
+    render_black_test,
+    render_receipt,
+    render_table_test,
+)
 from printer_app.task_source import build_task_source
 from printer_app.transport import printer_connection_label, send_to_printer
 
@@ -90,6 +95,28 @@ def black_test(
     return 0
 
 
+def table_test(
+    config_path: Path,
+    dry_run: bool,
+    printer_name: str | None,
+) -> int:
+    config = load_config(config_path)
+    printer = _resolve_printer(config, printer_name)
+    payload = render_table_test(printer)
+
+    if dry_run:
+        sys.stdout.buffer.write(payload)
+        return 0
+
+    send_to_printer(payload, printer)
+    print(
+        f"printed {len(payload)} table-test bytes "
+        f"to {printer_connection_label(printer)}",
+        flush=True,
+    )
+    return 0
+
+
 def serve(config_path: Path, host: str, port: int) -> int:
     import uvicorn
 
@@ -162,6 +189,15 @@ def build_parser() -> argparse.ArgumentParser:
     black_test_parser.add_argument("--speed", type=int)
     black_test_parser.add_argument("--printer")
 
+    table_test_parser = subparsers.add_parser("table-test")
+    table_test_parser.add_argument(
+        "--config",
+        type=Path,
+        default=config_path_from_env(),
+    )
+    table_test_parser.add_argument("--dry-run", action="store_true")
+    table_test_parser.add_argument("--printer")
+
     serve_parser = subparsers.add_parser("serve")
     serve_parser.add_argument("--config", type=Path, default=config_path_from_env())
     serve_parser.add_argument("--host", default="0.0.0.0")
@@ -191,6 +227,12 @@ def main(argv: list[str] | None = None) -> int:
             args.dry_run,
             args.density,
             args.speed,
+            getattr(args, "printer", None),
+        )
+    if args.command == "table-test":
+        return table_test(
+            args.config,
+            args.dry_run,
             getattr(args, "printer", None),
         )
     if args.command == "serve":

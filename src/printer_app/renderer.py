@@ -14,6 +14,7 @@ from PIL import Image, ImageDraw, ImageOps
 
 from printer_app import escpos
 from printer_app.escpos_preview import render_payload_to_png
+from printer_app.table import DOUBLE, SINGLE, ColumnDef, TableBuilder
 from printer_app.models import (
     PrinterConfig,
     ReceiptTask,
@@ -676,3 +677,164 @@ def _logo_bytes(columns: int, scale: float = 1.0) -> bytes:
     image = ImageOps.expand(image, border=8, fill=255)
     image = image.point(lambda pixel: 0 if pixel < 180 else 255, mode="1")
     return escpos.raster_image(image)
+
+
+TABLE_CODE_PAGE = "cp437"
+
+
+def render_table_test(printer: PrinterConfig) -> bytes:
+    columns = printer.paper_columns
+    cp = printer.code_page
+    tcp = TABLE_CODE_PAGE
+    output = bytearray()
+
+    output += escpos.command(escpos.ESC, b"@")
+    output += escpos.select_code_page(cp)
+    if printer.supports_print_density:
+        output += escpos.select_print_density(printer.print_density)
+    if printer.supports_print_speed:
+        output += escpos.select_print_speed(printer.print_speed)
+
+    output += escpos.command(escpos.ESC, b"a", b"\x01")
+    output += escpos.bold(True)
+    output += escpos.select_text_size(width=2, height=2)
+    output += escpos.text("TABLE TEST", cp)
+    output += escpos.select_text_size()
+    output += escpos.bold(False)
+    output += escpos.text(f"{columns}-column box-drawing tables", cp)
+    output += escpos.text("", cp)
+
+    output += escpos.select_code_page(tcp)
+
+    col_num = 4
+    col_time = 8
+    col_task = columns - col_num - col_time - 4
+    col_pri = 10
+    col_task_4 = columns - col_num - col_pri - col_time - 5
+
+    output += escpos.command(escpos.ESC, b"a", b"\x00")
+    output += escpos.bold(True)
+    output += escpos.text("Single-line 4-column:", tcp)
+    output += escpos.bold(False)
+
+    t1 = TableBuilder(
+        [
+            ColumnDef(col_num, "center"),
+            ColumnDef(col_task_4, "left"),
+            ColumnDef(col_pri, "center"),
+            ColumnDef(col_time, "right"),
+        ]
+    )
+    output += escpos.text(t1.top_border(), tcp)
+    for line in t1.row(["#", "Task", "Priority", "Time"], align_override="center"):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t1.separator(), tcp)
+    for line in t1.row(["1", "Clean Room 101", "normal", "08:00"]):
+        output += escpos.text(line, tcp)
+    for line in t1.row(["2", "Inspect Pool Area", "high", "09:30"]):
+        output += escpos.text(line, tcp)
+    for line in t1.row(["3", "Garden Maintenance", "normal", "11:00"]):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t1.bottom_border(), tcp)
+    output += escpos.text("", tcp)
+
+    output += escpos.bold(True)
+    output += escpos.text("Double-line 3-column:", tcp)
+    output += escpos.bold(False)
+
+    col_task_3 = columns - col_num - col_time - 4
+    t2 = TableBuilder(
+        [
+            ColumnDef(col_num, "center"),
+            ColumnDef(col_task_3, "left"),
+            ColumnDef(col_time, "right"),
+        ],
+        style=DOUBLE,
+    )
+    output += escpos.text(t2.top_border(), tcp)
+    for line in t2.row(["#", "Task", "Time"], align_override="center"):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t2.separator(), tcp)
+    for line in t2.row(["1", "Clean Room 101", "08:00"]):
+        output += escpos.text(line, tcp)
+    for line in t2.row(["2", "Inspect Pool Area", "09:30"]):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t2.bottom_border(), tcp)
+    output += escpos.text("", tcp)
+
+    output += escpos.bold(True)
+    output += escpos.text("Word wrap in cells:", tcp)
+    output += escpos.bold(False)
+
+    col_dur = 8
+    col_desc = columns - col_num - col_dur - 4
+    t3 = TableBuilder(
+        [
+            ColumnDef(col_num, "center"),
+            ColumnDef(col_desc, "left"),
+            ColumnDef(col_dur, "right"),
+        ]
+    )
+    output += escpos.text(t3.top_border(), tcp)
+    for line in t3.row(
+        ["#", "Description", "Dur"], align_override="center"
+    ):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t3.separator(), tcp)
+    for line in t3.row(
+        ["1", "Clean and prepare the main lobby entrance area", "30 min"]
+    ):
+        output += escpos.text(line, tcp)
+    for line in t3.row(
+        ["2", "Fix the leaky faucet in upstairs bathroom 2B", "15 min"]
+    ):
+        output += escpos.text(line, tcp)
+    for line in t3.row(
+        ["3", "Short task", "5 min"]
+    ):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t3.bottom_border(), tcp)
+    output += escpos.text("", tcp)
+
+    output += escpos.bold(True)
+    output += escpos.text("Numeric alignment:", tcp)
+    output += escpos.bold(False)
+
+    col_qty = 6
+    col_price = 7
+    col_sub = 8
+    col_item = columns - col_qty - col_price - col_sub - 5
+    t4 = TableBuilder(
+        [
+            ColumnDef(col_item, "left"),
+            ColumnDef(col_qty, "center"),
+            ColumnDef(col_price, "right"),
+            ColumnDef(col_sub, "right"),
+        ]
+    )
+    output += escpos.text(t4.top_border(), tcp)
+    for line in t4.row(
+        ["Item", "Qty", "Price", "Sub"], align_override="center"
+    ):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t4.separator(), tcp)
+    for line in t4.row(["Towels", "2", "$3.50", "$7.00"]):
+        output += escpos.text(line, tcp)
+    for line in t4.row(["Soap", "5", "$1.20", "$6.00"]):
+        output += escpos.text(line, tcp)
+    for line in t4.row(["Shampoo", "3", "$2.80", "$8.40"]):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t4.separator(), tcp)
+    for line in t4.row(["TOTAL", "", "", "$21.40"]):
+        output += escpos.text(line, tcp)
+    output += escpos.text(t4.bottom_border(), tcp)
+    output += escpos.text("", tcp)
+
+    output += escpos.select_code_page(cp)
+    output += escpos.select_font("a")
+    output += escpos.select_text_size()
+    output += escpos.bold(False)
+    output += escpos.underline(0)
+    if printer.cut:
+        output += escpos.cut()
+    return bytes(output)
