@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from textwrap import wrap
+
+VALID_ALIGNS = frozenset({"left", "center", "right"})
 
 
 @dataclass(frozen=True)
@@ -84,14 +86,18 @@ class TableBuilder:
         self._internal = internal_borders
         if not self._columns:
             raise ValueError("table must have at least one column")
+        for column in self._columns:
+            if column.width < 1:
+                raise ValueError("table column widths must be >= 1")
+            _validate_align(column.align)
 
     @property
     def total_width(self) -> int:
-        content = sum(c.width for c in self._columns)
-        n = len(self._columns)
-        if self._external:
-            return content + n + 1
-        return content + n - 1
+        return self._content_width + (2 if self._external else 0)
+
+    @property
+    def _content_width(self) -> int:
+        return sum(c.width for c in self._columns) + len(self._columns) - 1
 
     def top_border(
         self, adjacent: Sequence[str | ColspanCell] | None = None
@@ -133,14 +139,13 @@ class TableBuilder:
         *,
         align_override: str | None = None,
     ) -> list[str]:
+        if align_override is not None:
+            _validate_align(align_override)
         spans = _parse_cells(cells, len(self._columns))
         render_cols = _build_render_cols(
             spans, self._columns, align_override
         )
-        wrapped = [
-            wrap(str(rc.text), width=rc.width, break_long_words=True) or [""]
-            for rc in render_cols
-        ]
+        wrapped = [_wrap_cell(rc.text, rc.width) for rc in render_cols]
         max_lines = max(len(w) for w in wrapped)
         edge = self._style.v if self._external else ""
         join = self._style.v if self._internal else " "
@@ -165,21 +170,13 @@ class TableBuilder:
         adjacent: Sequence[str | ColspanCell] | None = None,
     ) -> str:
         if not self._internal:
-            width = sum(c.width for c in self._columns) + len(self._columns) - 1
-            return left + self._style.h * width + right
-        if adjacent is not None:
-            spans = _parse_cells(adjacent, len(self._columns))
-            render_cols = _build_render_cols(spans, self._columns, None)
-            segments: list[str] = [left]
-            for i, rc in enumerate(render_cols):
-                segments.append(self._style.h * rc.width)
-                segments.append(mid if i < len(render_cols) - 1 else right)
-            return "".join(segments)
-        segments = [left]
-        for i, col in enumerate(self._columns):
-            segments.append(self._style.h * col.width)
-            segments.append(mid if i < len(self._columns) - 1 else right)
-        return "".join(segments)
+            return left + self._style.h * self._content_width + right
+        boundaries = _boundary_positions(adjacent, len(self._columns))
+        return self._build_border(
+            left,
+            right,
+            lambda i: mid if i in boundaries else self._style.h,
+        )
 
     def _separator_border(
         self,
@@ -189,25 +186,29 @@ class TableBuilder:
         below: Sequence[str | ColspanCell] | None,
     ) -> str:
         if not self._internal:
-            width = sum(c.width for c in self._columns) + len(self._columns) - 1
-            return left + self._style.h * width + right
+            return left + self._style.h * self._content_width + right
         above_bounds = _boundary_positions(above, len(self._columns))
         below_bounds = _boundary_positions(below, len(self._columns))
+        return self._build_border(
+            left,
+            right,
+            lambda i: _separator_join(
+                i, above_bounds, below_bounds, self._style
+            ),
+        )
+
+    def _build_border(
+        self,
+        left: str,
+        right: str,
+        join_for_boundary: Callable[[int], str],
+    ) -> str:
         segments: list[str] = [left]
         n = len(self._columns)
         for i, col in enumerate(self._columns):
             segments.append(self._style.h * col.width)
             if i < n - 1:
-                has_above = i in above_bounds
-                has_below = i in below_bounds
-                if has_above and has_below:
-                    segments.append(self._style.x)
-                elif has_below:
-                    segments.append(self._style.tj)
-                elif has_above:
-                    segments.append(self._style.bj)
-                else:
-                    segments.append(self._style.h)
+                segments.append(join_for_boundary(i))
             else:
                 segments.append(right)
         return "".join(segments)
@@ -248,6 +249,7 @@ def _build_render_cols(
         if cell.span > 1:
             width += cell.span - 1
         align = align_override or cell.align or spanned[0].align
+        _validate_align(align)
         result.append(_RenderCol(cell.text, width, align))
         col_idx += cell.span
     return result
@@ -266,6 +268,37 @@ def _boundary_positions(
         if col_idx < num_columns:
             boundaries.add(col_idx - 1)
     return boundaries
+
+
+def _separator_join(
+    boundary: int,
+    above_bounds: set[int],
+    below_bounds: set[int],
+    style: BoxChars,
+) -> str:
+    has_above = boundary in above_bounds
+    has_below = boundary in below_bounds
+    if has_above and has_below:
+        return style.x
+    if has_below:
+        return style.tj
+    if has_above:
+        return style.bj
+    return style.h
+
+
+def _wrap_cell(text: str, width: int) -> list[str]:
+    lines: list[str] = []
+    for raw_line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        lines.extend(
+            wrap(raw_line, width=width, break_long_words=True) or [""]
+        )
+    return lines or [""]
+
+
+def _validate_align(align: str) -> None:
+    if align not in VALID_ALIGNS:
+        raise ValueError(f"unsupported table alignment: {align}")
 
 
 def _align_text(text: str, width: int, align: str) -> str:

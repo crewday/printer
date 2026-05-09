@@ -78,6 +78,22 @@ def test_empty_columns_raises() -> None:
         TableBuilder([])
 
 
+def test_invalid_column_width_raises() -> None:
+    with pytest.raises(ValueError, match="column widths"):
+        TableBuilder([ColumnDef(0)])
+
+
+def test_invalid_column_alignment_raises() -> None:
+    with pytest.raises(ValueError, match="unsupported table alignment"):
+        TableBuilder([ColumnDef(4, "middle")])
+
+
+def test_invalid_override_alignment_raises() -> None:
+    t = TableBuilder([ColumnDef(4)])
+    with pytest.raises(ValueError, match="unsupported table alignment"):
+        t.row(["x"], align_override="middle")
+
+
 def test_word_wrap() -> None:
     t = TableBuilder([ColumnDef(6, "left")])
     lines = t.row(["Hello World"])
@@ -88,6 +104,16 @@ def test_word_wrap_multi_column() -> None:
     t = TableBuilder([ColumnDef(6, "left"), ColumnDef(6, "left")])
     lines = t.row(["Hello World", "Foo"])
     assert lines == ["│Hello │Foo   │", "│World │      │"]
+
+
+def test_cell_newlines_are_preserved() -> None:
+    t = TableBuilder([ColumnDef(6, "left"), ColumnDef(6, "left")])
+    lines = t.row(["Alpha\nBeta", "One\n\nTwo"])
+    assert lines == [
+        "│Alpha │One   │",
+        "│Beta  │      │",
+        "│      │Two   │",
+    ]
 
 
 def test_right_align() -> None:
