@@ -1,6 +1,6 @@
 [project]
 name = "crewday-printer"
-version = "0.1.0"
+version = "0.1.1"
 description = "Docker-hosted worker task list printer for Crewday."
 requires-python = ">=3.14"
 dependencies = [
