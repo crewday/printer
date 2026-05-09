@@ -1,0 +1,36 @@
+version: 2
+
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: "weekly"
+      day: "friday"
+      time: "08:00"
+      timezone: "Asia/Dubai"
+    labels:
+      - dependencies
+
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "all-dependencies"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "all-dependencies"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "all-dependencies"
+    cooldown:
+      default-days: 7

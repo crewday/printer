@@ -112,6 +112,23 @@ docker compose run --rm printer uv run --group dev ruff check .
 docker compose run --rm printer uv run --group dev ruff format .
 ```
 
+## Dependency Updates and Releases
+
+Dependabot is configured in `.github/dependabot.yml` to open one grouped weekly PR
+for Python, Docker, and GitHub Actions dependency updates. Version update PRs use a
+7-day cooldown, and uv is configured with `exclude-newer = "7 days"` so Docker
+builds avoid Python packages uploaded in the last week.
+
+Create and publish a new image release with:
+
+```sh
+scripts/release.sh 0.2.0
+```
+
+The script updates `pyproject.toml`, creates an annotated `v0.2.0` tag, and pushes
+the commit and tag. The tag push triggers the Docker publish workflow, which
+publishes `ghcr.io/crewday/printer:0.2.0`, `:0.2`, `:0`, `:latest`, and a SHA tag.
+
 ## Printer Configuration
 
 Each printer in `config/printer.yaml` has a `type` field that selects the transport backend. Common fields like `profile`, `paper_columns`, and `code_page` are shared across all types.
