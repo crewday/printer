@@ -54,11 +54,30 @@ def _parse_profile(profile_id: str, raw: Any) -> PrinterProfile:
         paper_width=str(raw.get("paper_width", "")),
         cut_behavior=str(raw.get("cut_behavior", "")),
         code_pages=tuple(str(code_page) for code_page in code_pages),
-        image_logo=bool(raw.get("image_logo", True)),
-        supports_print_density=bool(raw.get("supports_print_density", True)),
-        supports_print_speed=bool(raw.get("supports_print_speed", True)),
+        image_logo=_parse_bool(raw.get("image_logo"), default=True),
+        supports_print_density=_parse_bool(
+            raw.get("supports_print_density"),
+            default=True,
+        ),
+        supports_print_speed=_parse_bool(raw.get("supports_print_speed"), default=True),
         paper_columns=int(raw.get("paper_columns", 48)),
         print_density=int(raw.get("print_density", 0)),
         print_speed=int(raw.get("print_speed", 0)),
-        cut=bool(raw.get("cut", True)),
+        cut=_parse_bool(raw.get("cut"), default=True),
     )
+
+
+def _parse_bool(value: object, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"invalid profile boolean value: {value!r}")

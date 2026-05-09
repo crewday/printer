@@ -477,6 +477,26 @@ def test_create_token_returns_full_token(
     assert len(body["token"]) == len("cpt_") + 64
 
 
+def test_create_token_rejects_unknown_scope(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/api/tokens/create",
+        json={"name": "Reader", "scope": "read"},
+        auth=("admin", "admin"),
+    )
+
+    assert response.status_code == 400
+    assert "unsupported token scope" in response.json()["detail"]
+
+
 def test_api_print_accepts_bearer_token(
     tmp_path: Path,
     monkeypatch,

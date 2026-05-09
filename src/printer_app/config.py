@@ -12,8 +12,8 @@ import yaml
 from printer_app import escpos
 from printer_app.cron import validate_cron_or_empty
 from printer_app.models import (
-    AppConfig,
     ApiTokenConfig,
+    AppConfig,
     CrewdayConfig,
     PrinterConfig,
     PrintScheduleConfig,
@@ -191,16 +191,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     printers = _parse_printers(printers_raw)
     receipt_template = parse_receipt_template(receipt_template_raw)
 
-    workers = tuple(
-        WorkerConfig(
-            name=str(worker["name"]),
-            schedule=str(worker.get("schedule", "")),
-            crewday_user_id=worker.get("crewday_user_id"),
-            enabled=bool(worker.get("enabled", True)),
-            printer=str(worker.get("printer", "")),
-        )
-        for worker in workers_raw
-    )
+    workers = _parse_workers(workers_raw, printers)
     api_tokens = tuple(
         ApiTokenConfig(
             name=str(t.get("name", "")),
@@ -221,6 +212,22 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         workers=workers,
         api_tokens=api_tokens,
     )
+
+
+def _parse_bool(value: object, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"invalid boolean value: {value!r}")
 
 
 def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
@@ -250,19 +257,21 @@ def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
             timeout_seconds=float(printer_raw.get("timeout_seconds", 5)),
             paper_columns=int(printer_raw.get("paper_columns", profile.paper_columns)),
             code_page=str(printer_raw.get("code_page", profile.code_pages[0])),
-            image_logo=bool(printer_raw.get("image_logo", profile.image_logo)),
-            supports_print_density=bool(
-                printer_raw.get(
-                    "supports_print_density",
-                    profile.supports_print_density,
-                )
+            image_logo=_parse_bool(
+                printer_raw.get("image_logo"),
+                default=profile.image_logo,
             ),
-            supports_print_speed=bool(
-                printer_raw.get("supports_print_speed", profile.supports_print_speed)
+            supports_print_density=_parse_bool(
+                printer_raw.get("supports_print_density"),
+                default=profile.supports_print_density,
+            ),
+            supports_print_speed=_parse_bool(
+                printer_raw.get("supports_print_speed"),
+                default=profile.supports_print_speed,
             ),
             print_density=int(printer_raw.get("print_density", profile.print_density)),
             print_speed=int(printer_raw.get("print_speed", profile.print_speed)),
-            cut=bool(printer_raw.get("cut", profile.cut)),
+            cut=_parse_bool(printer_raw.get("cut"), default=profile.cut),
             usb_vendor_id=_parse_optional_int(printer_raw.get("usb_vendor_id")),
             usb_product_id=_parse_optional_int(printer_raw.get("usb_product_id")),
             cups_printer_name=printer_raw.get("cups_printer_name"),
@@ -270,6 +279,40 @@ def _parse_printers(printers_raw: list[Any]) -> tuple[PrinterConfig, ...]:
         validate_printer_config(printer)
         printers.append(printer)
     return tuple(printers)
+
+
+def _parse_workers(
+    workers_raw: list[Any],
+    printers: tuple[PrinterConfig, ...],
+) -> tuple[WorkerConfig, ...]:
+    if not all(isinstance(worker, dict) for worker in workers_raw):
+        raise ValueError("workers must contain mappings")
+    printer_names = {printer.name for printer in printers}
+    workers = tuple(
+        WorkerConfig(
+            name=str(worker.get("name", "")).strip(),
+            schedule=str(worker.get("schedule", "")).strip(),
+            crewday_user_id=worker.get("crewday_user_id"),
+            enabled=_parse_bool(worker.get("enabled"), default=True),
+            printer=str(worker.get("printer", "")).strip(),
+        )
+        for worker in workers_raw
+    )
+    for worker in workers:
+        if not worker.name.strip():
+            raise ValueError("each worker must have a non-empty name")
+        if worker.schedule:
+            try:
+                validate_cron_or_empty(worker.schedule)
+            except ValueError as exc:
+                raise ValueError(
+                    f"worker.schedule for {worker.name!r} is invalid: {exc}"
+                ) from exc
+        if worker.printer and worker.printer not in printer_names:
+            raise ValueError(
+                f"worker {worker.name!r} references unknown printer: {worker.printer}"
+            )
+    return workers
 
 
 def default_receipt_template() -> ReceiptTemplateConfig:
@@ -294,10 +337,13 @@ def parse_receipt_template(raw: dict[str, Any]) -> ReceiptTemplateConfig:
                 font=str(section.get("font", "a")).strip().lower(),
                 width=int(section.get("width", 1)),
                 height=int(section.get("height", 1)),
-                bold=bool(section.get("bold", False)),
+                bold=_parse_bool(section.get("bold"), default=False),
                 underline=int(section.get("underline", 0)),
                 scale=float(section.get("scale", 1.0)),
-                trailing_blank=bool(section.get("trailing_blank", True)),
+                trailing_blank=_parse_bool(
+                    section.get("trailing_blank"),
+                    default=True,
+                ),
             )
             for section in sections_raw
         )

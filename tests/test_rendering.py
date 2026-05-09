@@ -151,6 +151,22 @@ def test_receipt_template_can_override_receipt_sections() -> None:
     assert "Printed on April 25th, 2026" not in preview
 
 
+def test_receipt_preview_breaks_long_unspaced_task_titles() -> None:
+    now = datetime(2026, 4, 25, 8, 30, tzinfo=ZoneInfo("Asia/Dubai"))
+    batch = TaskBatch(
+        worker_name="Vincent",
+        source_label="Mock tasks",
+        generated_at=now,
+        tasks=(ReceiptTask(id="1", title="A" * 80),),
+    )
+
+    preview = receipt_text_preview(batch, now, 48)
+
+    task_lines = [line for line in preview.splitlines() if line.startswith("A")]
+    assert task_lines
+    assert all(len(line) <= 48 for line in task_lines)
+
+
 def test_font_test_renders_escpos_feature_commands() -> None:
     payload = render_font_test(_printer())
 

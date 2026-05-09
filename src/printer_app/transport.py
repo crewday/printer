@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import socket
 import subprocess
+from contextlib import suppress
 
 from printer_app.models import PrinterConfig
 
@@ -68,13 +69,10 @@ def _send_usb(payload: bytes, printer: PrinterConfig) -> None:
     except usb.core.USBError as exc:
         raise ConnectionError(f"USB write failed: {exc}") from exc
     finally:
-        usb.util.dispose_resources(dev)
         if detached:
-            try:
-                usb.util.dispose_resources(dev)
+            with suppress(Exception):
                 dev.attach_kernel_driver(0)
-            except usb.core.USBError, Exception:
-                pass
+        usb.util.dispose_resources(dev)
 
 
 def _send_cups(payload: bytes, printer: PrinterConfig) -> None:
@@ -109,33 +107,39 @@ def _send_cups(payload: bytes, printer: PrinterConfig) -> None:
 def discover_usb_devices() -> list[dict[str, object]]:
     try:
         import usb.core
+        import usb.util
     except Exception:
         return []
     try:
         devices = usb.core.find(find_all=True)
         results: list[dict[str, object]] = []
         for dev in devices:
-            if not any(
-                iface.bInterfaceClass == 7
-                for cfg in dev
-                for iface in cfg
-            ):
+            if not any(iface.bInterfaceClass == 7 for cfg in dev for iface in cfg):
                 continue
             try:
-                manufacturer = usb.core.util.get_string(dev, dev.iManufacturer) if dev.iManufacturer else ""
+                manufacturer = (
+                    usb.util.get_string(dev, dev.iManufacturer)
+                    if dev.iManufacturer
+                    else ""
+                )
             except Exception:
                 manufacturer = ""
             try:
-                product = usb.core.util.get_string(dev, dev.iProduct) if dev.iProduct else ""
+                product = usb.util.get_string(dev, dev.iProduct) if dev.iProduct else ""
             except Exception:
                 product = ""
             parts = [p for p in (manufacturer, product) if p]
-            description = " ".join(parts) or f"USB device 0x{dev.idVendor:04x}:0x{dev.idProduct:04x}"
-            results.append({
-                "vendor_id": dev.idVendor,
-                "product_id": dev.idProduct,
-                "description": description,
-            })
+            description = (
+                " ".join(parts)
+                or f"USB device 0x{dev.idVendor:04x}:0x{dev.idProduct:04x}"
+            )
+            results.append(
+                {
+                    "vendor_id": dev.idVendor,
+                    "product_id": dev.idProduct,
+                    "description": description,
+                }
+            )
         return results
     except Exception:
         return []
@@ -149,7 +153,7 @@ def discover_cups_printers() -> list[dict[str, object]]:
             text=True,
             timeout=5,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         return []
     if result.returncode != 0:
         return []

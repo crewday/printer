@@ -71,6 +71,51 @@ workers:
     assert config.workers[0].crewday_user_id == "01HXUSER"
 
 
+def test_load_config_parses_string_booleans(tmp_path: Path) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: mock
+receipt_template:
+  sections:
+    - type: text
+      value: Hello
+      bold: "false"
+    - type: separator
+      trailing_blank: "off"
+    - type: tasks
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
+    image_logo: "false"
+    supports_print_density: "yes"
+    supports_print_speed: "0"
+    cut: "no"
+workers:
+  - name: Amina
+    enabled: "on"
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.printers[0].image_logo is False
+    assert config.printers[0].supports_print_density is True
+    assert config.printers[0].supports_print_speed is False
+    assert config.printers[0].cut is False
+    assert config.workers[0].enabled is True
+    assert config.receipt_template.sections[0].bold is False
+    assert config.receipt_template.sections[1].trailing_blank is False
+
+
 def test_load_config_reads_print_schedule(tmp_path: Path) -> None:
     path = tmp_path / "printer.yaml"
     path.write_text(
@@ -400,3 +445,63 @@ workers:
         assert "cups_printer_name" in str(exc)
     else:
         raise AssertionError("missing cups_printer_name should fail config loading")
+
+
+def test_load_config_rejects_invalid_worker_schedule(tmp_path: Path) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: mock
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
+workers:
+  - name: Amina
+    schedule: "0 8 *"
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        load_config(path)
+    except ValueError as exc:
+        assert "worker.schedule" in str(exc)
+    else:
+        raise AssertionError("invalid worker schedule should fail config loading")
+
+
+def test_load_config_rejects_unknown_worker_printer(tmp_path: Path) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: mock
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
+workers:
+  - name: Amina
+    printer: Missing
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        load_config(path)
+    except ValueError as exc:
+        assert "unknown printer" in str(exc)
+    else:
+        raise AssertionError("unknown worker printer should fail config loading")

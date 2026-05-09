@@ -643,7 +643,7 @@ def _font_columns(columns: int, font: str, width_multiplier: int = 1) -> int:
 
 
 def _wrapped(value: str, columns: int) -> list[str]:
-    return wrap(value, width=columns, break_long_words=False) or [""]
+    return wrap(value, width=columns, break_long_words=True) or [""]
 
 
 def _preview_rule(columns: int) -> str:

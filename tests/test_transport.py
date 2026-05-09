@@ -7,6 +7,7 @@ import pytest
 
 from printer_app.models import PrinterConfig
 from printer_app.transport import (
+    discover_usb_devices,
     printer_connection_label,
     send_to_printer,
 )
@@ -123,6 +124,43 @@ def test_usb_send_raises_when_device_not_found() -> None:
 
         with pytest.raises(ConnectionError, match="no USB device found"):
             _send_usb(b"\x1b@", printer)
+
+
+def test_discover_usb_devices_uses_usb_util_string_descriptors() -> None:
+    class Interface:
+        bInterfaceClass = 7
+
+    class Config:
+        def __iter__(self):
+            return iter([Interface()])
+
+    class Device:
+        idVendor = 0x04B8
+        idProduct = 0x0E15
+        iManufacturer = 1
+        iProduct = 2
+
+        def __iter__(self):
+            return iter([Config()])
+
+    mock_usb = MagicMock()
+    mock_usb.core.find.return_value = [Device()]
+    mock_usb.util.get_string.side_effect = ["Epson", "TM-T20II"]
+    usb_modules = {
+        "usb": mock_usb,
+        "usb.core": mock_usb.core,
+        "usb.util": mock_usb.util,
+    }
+    with patch.dict("sys.modules", usb_modules):
+        devices = discover_usb_devices()
+
+    assert devices == [
+        {
+            "vendor_id": 0x04B8,
+            "product_id": 0x0E15,
+            "description": "Epson TM-T20II",
+        }
+    ]
 
 
 def test_cups_send_calls_lp_command() -> None:

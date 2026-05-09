@@ -77,8 +77,9 @@ class CrewdayHttpTaskSource:
                 f"worker {worker.name!r} needs crewday_user_id for HTTP source"
             )
 
-        start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1)
+        local_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = local_start.astimezone(UTC)
+        end = (local_start + timedelta(days=1)).astimezone(UTC)
         headers = {}
         if self._config.crewday.api_token:
             headers["Authorization"] = f"Bearer {self._config.crewday.api_token}"
@@ -100,7 +101,7 @@ class CrewdayHttpTaskSource:
             worker_name=worker.name,
             source_label="Crewday",
             generated_at=now,
-            tasks=tuple(_task_from_crewday(row) for row in rows),
+            tasks=tuple(_task_from_crewday(row, now) for row in rows),
         )
 
     def fetch_workers(self) -> tuple[CrewdayWorker, ...]:
@@ -137,11 +138,13 @@ def fetch_crewday_workers(config: AppConfig) -> tuple[CrewdayWorker, ...]:
     )
 
 
-def _task_from_crewday(row: dict[str, Any]) -> ReceiptTask:
+def _task_from_crewday(row: dict[str, Any], now: datetime) -> ReceiptTask:
     scheduled = row.get("scheduled_for_utc") or row.get("scheduled_start")
     scheduled_dt = None
     if isinstance(scheduled, str):
         scheduled_dt = datetime.fromisoformat(scheduled.replace("Z", "+00:00"))
+        if scheduled_dt.tzinfo is not None and now.tzinfo is not None:
+            scheduled_dt = scheduled_dt.astimezone(now.tzinfo)
 
     checklist_raw = row.get("checklist") or row.get("checklist_items") or []
     checklist = tuple(

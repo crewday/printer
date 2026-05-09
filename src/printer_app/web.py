@@ -6,12 +6,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import replace
 from datetime import datetime
+from hashlib import sha1
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
-
-from hashlib import sha1
 
 from fastapi import Body, Depends, FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -22,6 +21,7 @@ from pydantic import BaseModel
 
 from printer_app import escpos
 from printer_app.auth import (
+    SCOPE_ALLOWED_PATHS,
     configured_password_hash,
     generate_api_token,
     hash_password,
@@ -180,9 +180,12 @@ def require_api_auth(
                 if not scope_allows_path(
                     stored.scope, request.method, request.url.path
                 ):
+                    detail = (
+                        f"token scope '{stored.scope}' does not allow this endpoint"
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail=f"token scope '{stored.scope}' does not allow this endpoint",
+                        detail=detail,
                     )
                 return
         raise HTTPException(
@@ -746,6 +749,9 @@ def create_token_api(
     token_name = payload.name.strip()
     if not token_name:
         raise HTTPException(status_code=400, detail="token name is required")
+    scope = payload.scope.strip()
+    if scope not in SCOPE_ALLOWED_PATHS:
+        raise HTTPException(status_code=400, detail=f"unsupported token scope: {scope}")
     config = load_config(config_path_from_env())
     raw = config_to_raw(config)
     token, prefix, token_hash = generate_api_token()
@@ -754,7 +760,7 @@ def create_token_api(
         "name": token_name,
         "token_prefix": prefix,
         "token_hash": token_hash,
-        "scope": payload.scope,
+        "scope": scope,
         "created_at": now,
     }
     api_tokens = list(raw.get("api_tokens") or [])
@@ -764,11 +770,11 @@ def create_token_api(
         write_raw_config(config_path_from_env(), raw)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    _record(f"Created API token {token_name!r} ({payload.scope}).")
+    _record(f"Created API token {token_name!r} ({scope}).")
     return {
         "name": token_name,
         "token_prefix": prefix,
-        "scope": payload.scope,
+        "scope": scope,
         "created_at": now,
         "token": token,
     }
@@ -883,11 +889,18 @@ async def _schedule_loop() -> None:
     while True:
         try:
             config = load_config(config_path_from_env())
-            now = datetime.now().replace(second=0, microsecond=0)
+            now = datetime.now(ZoneInfo(config.timezone)).replace(
+                second=0,
+                microsecond=0,
+            )
             due_workers = _scheduled_worker_names(config, now)
             run_key = tuple((name, now.isoformat()) for name in due_workers)
             if due_workers and run_key != last_run_key:
-                result = _print_worker_receipts(config, due_workers)
+                result = await asyncio.to_thread(
+                    _print_worker_receipts,
+                    config,
+                    due_workers,
+                )
                 last_run_key = run_key
                 _record(
                     f"Scheduled print sent {result['count']} receipt"

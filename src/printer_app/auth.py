@@ -6,13 +6,22 @@ import hmac
 import os
 import secrets
 
+PASSWORD_HASH_ROUNDS = 200_000
 
-def hash_password(password: str, *, salt: str | None = None) -> str:
+
+def hash_password(
+    password: str,
+    *,
+    salt: str | None = None,
+    rounds: int = PASSWORD_HASH_ROUNDS,
+) -> str:
+    if rounds < 1:
+        raise ValueError("password hash rounds must be positive")
     salt_bytes = (salt or secrets.token_hex(16)).encode("ascii")
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt_bytes, 200_000)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt_bytes, rounds)
     salt_text = salt_bytes.decode("ascii")
     digest_text = base64.b64encode(digest).decode("ascii")
-    return f"pbkdf2_sha256$200000${salt_text}${digest_text}"
+    return f"pbkdf2_sha256${rounds}${salt_text}${digest_text}"
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
@@ -22,8 +31,13 @@ def verify_password(password: str, stored_hash: str) -> bool:
         return False
     if algorithm != "pbkdf2_sha256":
         return False
-    expected = hash_password(password, salt=salt).split("$", 3)[3]
-    _ = rounds_raw
+    try:
+        rounds = int(rounds_raw)
+    except ValueError:
+        return False
+    if rounds < 1:
+        return False
+    expected = hash_password(password, salt=salt, rounds=rounds).split("$", 3)[3]
     return hmac.compare_digest(expected, digest)
 
 

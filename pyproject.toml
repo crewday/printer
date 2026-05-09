@@ -36,6 +36,7 @@ printer_app = [
   "profiles/*.yaml",
   "templates/*.html",
   "static/*.css",
+  "static/*.js",
   "static/*.svg",
 ]
 
