@@ -367,3 +367,90 @@ def test_colspan_align_override_takes_priority() -> None:
     t = TableBuilder([ColumnDef(6, "right"), ColumnDef(6, "left")])
     lines = t.row([ColspanCell("Hi", span=2)], align_override="center")
     assert lines[0] == "│      Hi     │"
+
+
+# --- Borders with adjacent colspan ---
+
+
+def test_top_border_flat_for_full_colspan() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    border = t.top_border(adjacent=[ColspanCell("Title", span=3)])
+    assert border == "┌──────────────────────┐"
+
+
+def test_bottom_border_flat_for_full_colspan() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    border = t.bottom_border(adjacent=[ColspanCell("Title", span=3)])
+    assert border == "└──────────────────────┘"
+
+
+def test_separator_flat_for_full_colspan_above() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    colspan = [ColspanCell("Title", span=3)]
+    sep = t.separator(above=colspan)
+    assert sep == "├────┬──────────┬──────┤"
+
+
+def test_separator_flat_for_full_colspan_below() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    colspan = [ColspanCell("Title", span=3)]
+    sep = t.separator(below=colspan)
+    assert sep == "├────┴──────────┴──────┤"
+
+
+def test_separator_flat_for_full_colspan_both() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    colspan = [ColspanCell("Title", span=3)]
+    sep = t.separator(above=colspan, below=colspan)
+    assert sep == "├──────────────────────┤"
+
+
+def test_top_border_partial_colspan() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    border = t.top_border(adjacent=[ColspanCell("A", span=2), "B"])
+    assert border == "┌───────────────┬──────┐"
+
+
+def test_separator_partial_colspan_above() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    sep = t.separator(above=["A", ColspanCell("B", span=2)])
+    assert sep == "├────┼──────────┬──────┤"
+
+
+def test_separator_partial_colspan_below() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10), ColumnDef(6)])
+    sep = t.separator(below=["A", ColspanCell("B", span=2)])
+    assert sep == "├────┼──────────┴──────┤"
+
+
+def test_border_adjacent_no_colspan_matches_default() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10)])
+    assert t.top_border(adjacent=["A", "B"]) == t.top_border()
+    assert t.separator(above=["A", "B"], below=["C", "D"]) == t.separator()
+    assert t.bottom_border(adjacent=["A", "B"]) == t.bottom_border()
+
+
+def test_border_adjacent_none_matches_default() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(10)])
+    assert t.top_border(adjacent=None) == t.top_border()
+    assert t.separator(above=None, below=None) == t.separator()
+
+
+def test_colspan_table_full_render() -> None:
+    t = TableBuilder(
+        [ColumnDef(4, "center"), ColumnDef(10, "left"), ColumnDef(6, "right")]
+    )
+    title = [ColspanCell("Report", span=3, align="center")]
+    output = [
+        t.top_border(adjacent=title),
+        *t.row(title),
+        t.separator(above=title),
+        *t.row(["#", "Name", "Time"], align_override="center"),
+        t.separator(),
+        *t.row(["1", "Hello", "08:00"]),
+        t.bottom_border(adjacent=title),
+    ]
+    assert output[0] == "┌──────────────────────┐"
+    assert output[1] == "│        Report        │"
+    assert output[2] == "├────┬──────────┬──────┤"
+    assert output[-1] == "└──────────────────────┘"

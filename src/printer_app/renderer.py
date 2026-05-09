@@ -907,6 +907,12 @@ def render_table_test(printer: PrinterConfig) -> bytes:
     cs_time = 8
     cs_task = columns - cs_num - cs_time - 4
     full_span = 3
+    title_cells: list[str | ColspanCell] = [
+        ColspanCell("DAILY TASK REPORT", span=full_span, align="center")
+    ]
+    footer_cells: list[str | ColspanCell] = [
+        ColspanCell("END OF REPORT", span=full_span, align="center")
+    ]
     t7 = TableBuilder(
         [
             ColumnDef(cs_num, "center"),
@@ -916,21 +922,17 @@ def render_table_test(printer: PrinterConfig) -> bytes:
     )
     output += _table_block(
         [
-            t7.top_border(),
-            *t7.row(
-                [ColspanCell("DAILY TASK REPORT", span=full_span, align="center")]
-            ),
-            t7.separator(),
+            t7.top_border(adjacent=title_cells),
+            *t7.row(title_cells),
+            t7.separator(above=title_cells),
             *t7.row(["#", "Task", "Time"], align_override="center"),
             t7.separator(),
             *t7.row(["1", "Clean Room 101", "08:00"]),
             *t7.row(["2", "Inspect Pool Area", "09:30"]),
             *t7.row(["3", "Garden Maintenance", "11:00"]),
-            t7.separator(),
-            *t7.row(
-                [ColspanCell("END OF REPORT", span=full_span, align="center")]
-            ),
-            t7.bottom_border(),
+            t7.separator(below=footer_cells),
+            *t7.row(footer_cells),
+            t7.bottom_border(adjacent=footer_cells),
         ],
         tcp,
     )
