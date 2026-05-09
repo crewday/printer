@@ -14,7 +14,6 @@ from PIL import Image, ImageDraw, ImageOps
 
 from printer_app import escpos
 from printer_app.escpos_preview import render_payload_to_png
-from printer_app.table import DOUBLE, SINGLE, ColumnDef, TableBuilder
 from printer_app.models import (
     PrinterConfig,
     ReceiptTask,
@@ -22,6 +21,7 @@ from printer_app.models import (
     ReceiptTemplateSection,
     TaskBatch,
 )
+from printer_app.table import DOUBLE, ColspanCell, ColumnDef, TableBuilder
 
 BRAND = "crew.day"
 RULE_THICKNESS_DOTS = 2
@@ -718,7 +718,6 @@ def render_table_test(printer: PrinterConfig) -> bytes:
 
     col_num = 4
     col_time = 8
-    col_task = columns - col_num - col_time - 4
     col_pri = 10
     col_task_4 = columns - col_num - col_pri - col_time - 5
 
@@ -836,6 +835,102 @@ def render_table_test(printer: PrinterConfig) -> bytes:
             t4.separator(),
             *t4.row(["TOTAL", "", "", "$21.40"]),
             t4.bottom_border(),
+        ],
+        tcp,
+    )
+
+    output += escpos.bold(True)
+    output += escpos.text("No external borders:", tcp)
+    output += escpos.bold(False)
+
+    ne_num = 4
+    ne_time = 8
+    ne_task = columns - ne_num - ne_time - 2
+    t5 = TableBuilder(
+        [
+            ColumnDef(ne_num, "center"),
+            ColumnDef(ne_task, "left"),
+            ColumnDef(ne_time, "right"),
+        ],
+        external_borders=False,
+    )
+    output += _table_block(
+        [
+            *t5.row(["#", "Task", "Time"], align_override="center"),
+            t5.separator(),
+            *t5.row(["1", "Clean Room 101", "08:00"]),
+            *t5.row(["2", "Inspect Pool Area", "09:30"]),
+            *t5.row(["3", "Garden Maintenance", "11:00"]),
+        ],
+        tcp,
+    )
+
+    output += escpos.bold(True)
+    output += escpos.text("No internal borders:", tcp)
+    output += escpos.bold(False)
+
+    ni_sub = 8
+    ni_qty = 6
+    ni_price = 7
+    ni_item = columns - ni_qty - ni_price - ni_sub - 5
+    t6 = TableBuilder(
+        [
+            ColumnDef(ni_item, "left"),
+            ColumnDef(ni_qty, "center"),
+            ColumnDef(ni_price, "right"),
+            ColumnDef(ni_sub, "right"),
+        ],
+        internal_borders=False,
+    )
+    output += _table_block(
+        [
+            t6.top_border(),
+            *t6.row(
+                ["Item", "Qty", "Price", "Sub"], align_override="center"
+            ),
+            t6.separator(),
+            *t6.row(["Towels", "2", "$3.50", "$7.00"]),
+            *t6.row(["Soap", "5", "$1.20", "$6.00"]),
+            *t6.row(["Shampoo", "3", "$2.80", "$8.40"]),
+            t6.separator(),
+            *t6.row(["TOTAL", "", "", "$21.40"]),
+            t6.bottom_border(),
+        ],
+        tcp,
+    )
+
+    output += escpos.bold(True)
+    output += escpos.text("Colspan (merged cells):", tcp)
+    output += escpos.bold(False)
+
+    cs_num = 4
+    cs_time = 8
+    cs_task = columns - cs_num - cs_time - 4
+    full_span = 3
+    t7 = TableBuilder(
+        [
+            ColumnDef(cs_num, "center"),
+            ColumnDef(cs_task, "left"),
+            ColumnDef(cs_time, "right"),
+        ]
+    )
+    output += _table_block(
+        [
+            t7.top_border(),
+            *t7.row(
+                [ColspanCell("DAILY TASK REPORT", span=full_span, align="center")]
+            ),
+            t7.separator(),
+            *t7.row(["#", "Task", "Time"], align_override="center"),
+            t7.separator(),
+            *t7.row(["1", "Clean Room 101", "08:00"]),
+            *t7.row(["2", "Inspect Pool Area", "09:30"]),
+            *t7.row(["3", "Garden Maintenance", "11:00"]),
+            t7.separator(),
+            *t7.row(
+                [ColspanCell("END OF REPORT", span=full_span, align="center")]
+            ),
+            t7.bottom_border(),
         ],
         tcp,
     )

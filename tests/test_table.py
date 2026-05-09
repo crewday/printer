@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from printer_app.table import DOUBLE, SINGLE, ColumnDef, TableBuilder
+from printer_app.table import (
+    DOUBLE,
+    ColspanCell,
+    ColumnDef,
+    TableBuilder,
+)
 
 
 def _three_col() -> TableBuilder:
@@ -64,7 +69,7 @@ def test_no_cells() -> None:
 
 
 def test_too_many_cells_raises() -> None:
-    with pytest.raises(ValueError, match="expected at most 3"):
+    with pytest.raises(ValueError, match="cell spans"):
         _three_col().row(["a", "b", "c", "d"])
 
 
@@ -123,3 +128,242 @@ def test_empty_string_cell() -> None:
     t = TableBuilder([ColumnDef(4)])
     lines = t.row([""])
     assert lines == ["│    │"]
+
+
+# --- external_borders=False ---
+
+
+def test_no_external_total_width() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(20), ColumnDef(8)],
+        external_borders=False,
+    )
+    assert t.total_width == 4 + 20 + 8 + 2
+
+
+def test_no_external_top_border() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        external_borders=False,
+    )
+    assert t.top_border() == "────┬──────────"
+
+
+def test_no_external_bottom_border() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        external_borders=False,
+    )
+    assert t.bottom_border() == "────┴──────────"
+
+
+def test_no_external_separator() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        external_borders=False,
+    )
+    assert t.separator() == "────┼──────────"
+
+
+def test_no_external_row() -> None:
+    t = TableBuilder(
+        [ColumnDef(4, "center"), ColumnDef(10, "left")],
+        external_borders=False,
+    )
+    lines = t.row(["Hi", "World"])
+    assert lines == [" Hi │World     "]
+
+
+def test_no_external_single_col() -> None:
+    t = TableBuilder(
+        [ColumnDef(10)],
+        external_borders=False,
+    )
+    assert t.total_width == 10
+    assert t.top_border() == "──────────"
+    assert t.separator() == "──────────"
+    assert t.row(["Hi"]) == ["Hi        "]
+
+
+# --- internal_borders=False ---
+
+
+def test_no_internal_total_width() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(20), ColumnDef(8)],
+        internal_borders=False,
+    )
+    assert t.total_width == 4 + 20 + 8 + 4
+
+
+def test_no_internal_top_border() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        internal_borders=False,
+    )
+    assert t.top_border() == "┌───────────────┐"
+
+
+def test_no_internal_bottom_border() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        internal_borders=False,
+    )
+    assert t.bottom_border() == "└───────────────┘"
+
+
+def test_no_internal_separator() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        internal_borders=False,
+    )
+    assert t.separator() == "├───────────────┤"
+
+
+def test_no_internal_row() -> None:
+    t = TableBuilder(
+        [ColumnDef(4, "center"), ColumnDef(10, "left")],
+        internal_borders=False,
+    )
+    lines = t.row(["Hi", "World"])
+    assert lines == ["│ Hi  World     │"]
+
+
+def test_no_internal_single_col() -> None:
+    t = TableBuilder(
+        [ColumnDef(10)],
+        internal_borders=False,
+    )
+    assert t.total_width == 12
+    assert t.top_border() == "┌──────────┐"
+    assert t.row(["Hi"]) == ["│Hi        │"]
+
+
+# --- both off ---
+
+
+def test_no_borders_total_width() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        external_borders=False,
+        internal_borders=False,
+    )
+    assert t.total_width == 4 + 10 + 1
+
+
+def test_no_borders_top_border_empty() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10)],
+        external_borders=False,
+        internal_borders=False,
+    )
+    assert t.top_border() == ""
+    assert t.bottom_border() == ""
+    assert t.separator() == ""
+
+
+def test_no_borders_row() -> None:
+    t = TableBuilder(
+        [ColumnDef(4, "center"), ColumnDef(10, "left")],
+        external_borders=False,
+        internal_borders=False,
+    )
+    lines = t.row(["Hi", "World"])
+    assert lines == [" Hi  World     "]
+
+
+def test_no_borders_single_col() -> None:
+    t = TableBuilder(
+        [ColumnDef(10)],
+        external_borders=False,
+        internal_borders=False,
+    )
+    assert t.total_width == 10
+    assert t.row(["Hi"]) == ["Hi        "]
+
+
+# --- ColspanCell ---
+
+
+def test_colspan_basic() -> None:
+    t = TableBuilder(
+        [ColumnDef(4, "center"), ColumnDef(10, "left"), ColumnDef(6, "right")]
+    )
+    lines = t.row([ColspanCell("Merged", span=2, align="center"), "42"])
+    assert lines[0] == "│     Merged    │    42│"
+    assert len(lines[0]) == t.total_width
+
+
+def test_colspan_full_width() -> None:
+    t = TableBuilder(
+        [ColumnDef(4, "center"), ColumnDef(10, "left"), ColumnDef(6, "right")]
+    )
+    lines = t.row([ColspanCell("Full Width Title", span=3, align="center")])
+    assert lines[0] == "│   Full Width Title   │"
+    assert len(lines[0]) == t.total_width
+
+
+def test_colspan_header_and_data() -> None:
+    t = TableBuilder(
+        [ColumnDef(4, "center"), ColumnDef(10, "left"), ColumnDef(6, "right")]
+    )
+    output = [
+        t.top_border(),
+        *t.row([ColspanCell("Report", span=3, align="center")]),
+        t.separator(),
+        *t.row(["#", "Name", "Time"], align_override="center"),
+        t.separator(),
+        *t.row(["1", "Hello", "08:00"]),
+        t.bottom_border(),
+    ]
+    assert len(output) == 7
+    assert output[0] == "┌────┬──────────┬──────┐"
+    assert output[1] == "│        Report        │"
+    assert output[5] == "│ 1  │Hello     │ 08:00│"
+
+
+def test_colspan_with_no_internal() -> None:
+    t = TableBuilder(
+        [ColumnDef(4), ColumnDef(10), ColumnDef(6)],
+        internal_borders=False,
+    )
+    lines = t.row([ColspanCell("Wide", span=2), "end"])
+    assert lines[0] == "│Wide            end   │"
+    assert len(lines[0]) == t.total_width
+
+
+def test_colspan_word_wrap() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(6)])
+    lines = t.row([ColspanCell("A long merged text", span=2)])
+    assert len(lines) > 1
+    assert all(len(line) == t.total_width for line in lines)
+
+
+def test_colspan_span_exceeds_columns_raises() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(6)])
+    with pytest.raises(ValueError, match="cell spans"):
+        t.row([ColspanCell("x", span=3)])
+
+
+def test_colspan_invalid_span_raises() -> None:
+    t = TableBuilder([ColumnDef(4)])
+    with pytest.raises(ValueError, match="colspan must be >= 1"):
+        t.row([ColspanCell("x", span=0)])
+
+
+def test_colspan_total_spans_exceed_raises() -> None:
+    t = TableBuilder([ColumnDef(4), ColumnDef(6)])
+    with pytest.raises(ValueError, match="cell spans"):
+        t.row(["a", "b", ColspanCell("c", span=1)])
+
+
+def test_colspan_uses_first_column_align() -> None:
+    t = TableBuilder([ColumnDef(6, "right"), ColumnDef(6, "left")])
+    lines = t.row([ColspanCell("Hi", span=2)])
+    assert lines[0] == "│           Hi│"
+
+
+def test_colspan_align_override_takes_priority() -> None:
+    t = TableBuilder([ColumnDef(6, "right"), ColumnDef(6, "left")])
+    lines = t.row([ColspanCell("Hi", span=2)], align_override="center")
+    assert lines[0] == "│      Hi     │"
