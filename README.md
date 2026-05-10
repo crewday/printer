@@ -1,6 +1,8 @@
 # Crewday Thermal Printer
 
-![Printer console UI](docs/assets/printer-console.png)
+| Console | Printer setup |
+|---|---|
+| ![Printer console UI](docs/assets/printer-console.png) | ![Default printer setup UI](docs/assets/printer-default.png) |
 
 Crewday Thermal Printer is a Docker-hosted control panel for turning Crewday task lists into compact ESC/POS receipt prints. It keeps the boring parts explicit: where tasks come from, which workers print, when they print, how the receipt looks, and which printer backend receives the bytes.
 
