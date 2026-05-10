@@ -1,11 +1,11 @@
 ui:
-  username: enc:v1:gAAAAABp9flTVva-9ADha7e3H2n4MkQlneyrU64FBNL5cSMBBSTUfphDVwAqYJGDB0TvrzIZVnRyoTUXbGrUPQgqzJr_2SM3Tg==
+  username: enc:v1:gAAAAABqAHYdcsYBLX_vl9W_0cOEms_5D7szacCrVJxHH3laPl6lii6iSUO4uKaZSJjQ1XbFnmcn46QSQrBBDXY1dqE6vSAXpw==
   password_hash: null
 crewday:
-  source: mock
-  base_url: http://crewday:8000
-  api_token: null
-  workspace_slug: null
+  source: crewday_http
+  base_url: https://dev-app.crew.day
+  api_token: enc:v1:gAAAAABqAHYdeQkcrWQEn8wwI3hH_wnOotlWQWL6uaDthQUr0daYwypd0pTWJxG58F8zMtSWUF7pS-Jp29mrePgsVgGtfiF20NwH0t6LDl-W4jgHKKSwAbHQNhsPQrg-yD_XHPx4FAEgtiXpIxfaGoC9nwf0IbXKSjSPb2MRmPIlKUZO3sNb6fBPv4oTbcfmrSLn0WPAKDuF
+  workspace_slug: smoke
   workspace_id: null
   verify_tls: true
 print_schedule:
@@ -144,6 +144,6 @@ workers:
 api_tokens:
 - name: Home Assistant
   token_prefix: cpt_466dd5be
-  token_hash: enc:v1:gAAAAABp9flT948Jo-HhxD2lVj5EU5bc65xaMuyFZl5FW0FZPyZtr9sMk8BbjM3XlJLkIKEvW9sI8JFjISdu5wFpIZzNaWm2f8W4x-BAHNmv_lrjH4UsHTFzNMf0T1pqWUaOcStx6Q1KbWbwm-cgSRKf8V8OpUA5FCZmW3cLbMEaGfL-L5USK8g=
+  token_hash: enc:v1:gAAAAABqAHYdG2kw-jFSYYppVZ968VgCS05aScfTp9h7UFvDBv6vIZvmEsYBxNKnX20pCfXRZhbjCY_uam67ERxGpVhS_9tlUrvUdGekpLRGlWlxL1ryYJwMwO5tVcR2WbSyLyyTXWZ_K5viMwdyTLJwhtKpiYh-pA3l_nObCWdcsbNBIl9FbSg=
   scope: print
   created_at: '2026-05-02T13:17:07.619561+00:00'

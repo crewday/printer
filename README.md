@@ -58,7 +58,7 @@ Use the UI for normal setup. Use the commands below when you want a repeatable t
 
 2. Pick a task source:
 
-   Keep `crewday.source: mock` for offline previews and printer setup. Switch to `crewday_http` when Crewday is reachable, then set `crewday.base_url` with `http://` or `https://`, `workspace_slug`, and `CREWDAY_API_TOKEN` or an encrypted YAML token through the UI. Workspace tokens and personal access tokens both use the same bearer-token setting; when a worker row has no Crewday user id, the printer asks Crewday for the token-visible task list without an assignee filter. Disable `crewday.verify_tls` only for self-hosted HTTPS endpoints with a certificate you intentionally do not want verified.
+   `crewday_http` is the default source. Set `crewday.base_url` with `http://` or `https://`, `workspace_slug`, and `CREWDAY_API_TOKEN` or an encrypted YAML token through the UI. Workspace tokens and personal access tokens both use the same bearer-token setting; when a worker row has no Crewday user id, the printer asks Crewday for the token-visible task list without an assignee filter. Select the `mock` source, shown in the UI as Offline sample tasks, only when you need offline previews or printer setup without Crewday. Disable `crewday.verify_tls` only for self-hosted HTTPS endpoints with a certificate you intentionally do not want verified.
 
 3. Find the printer connection:
 
@@ -115,7 +115,7 @@ Treat real paper output as an integration side effect. Prefer `preview` and `--d
 
 The service has explicit boundaries for:
 
-- Crewday HTTP or mock task data
+- Crewday HTTP or offline sample task data
 - YAML-backed configuration
 - Authenticated setup and calibration UI
 - Receipt rendering and template composition

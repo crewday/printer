@@ -5,7 +5,7 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
@@ -107,16 +107,20 @@ def default_cups_printer_raw(name: str, cups_name: str = "TM-T20II") -> dict[str
 def default_config() -> dict[str, Any]:
     ui_username = os.environ.get("PRINTER_UI_USERNAME", "admin")
     crewday_token = os.environ.get("CREWDAY_API_TOKEN")
+    crewday_base_url, crewday_workspace_slug = normalize_crewday_connection(
+        os.environ.get("CREWDAY_BASE_URL", "http://crewday:8000"),
+        os.environ.get("CREWDAY_WORKSPACE_SLUG"),
+    )
     return {
         "ui": {
             "username": ui_username,
             "password_hash": None,
         },
         "crewday": {
-            "source": "mock",
-            "base_url": os.environ.get("CREWDAY_BASE_URL", "http://crewday:8000"),
+            "source": "crewday_http",
+            "base_url": crewday_base_url,
             "api_token": crewday_token,
-            "workspace_slug": os.environ.get("CREWDAY_WORKSPACE_SLUG"),
+            "workspace_slug": crewday_workspace_slug,
             "workspace_id": None,
             "verify_tls": _parse_bool(
                 os.environ.get("CREWDAY_VERIFY_TLS"),
@@ -179,17 +183,19 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         ),
         password_hash=decrypt_secret(ui_raw.get("password_hash")),
     )
-    crewday = CrewdayConfig(
-        source=str(crewday_raw.get("source", "mock")),
-        base_url=str(
-            os.environ.get("CREWDAY_BASE_URL")
-            or crewday_raw.get("base_url", "http://crewday:8000")
-        ).rstrip("/"),
-        api_token=os.environ.get("CREWDAY_API_TOKEN")
-        or decrypt_secret(crewday_raw.get("api_token")),
-        workspace_slug=os.environ.get("CREWDAY_WORKSPACE_SLUG")
+    crewday_base_url, crewday_workspace_slug = normalize_crewday_connection(
+        os.environ.get("CREWDAY_BASE_URL")
+        or crewday_raw.get("base_url", "http://crewday:8000"),
+        os.environ.get("CREWDAY_WORKSPACE_SLUG")
         or crewday_raw.get("workspace_slug")
         or crewday_raw.get("workspace_id"),
+    )
+    crewday = CrewdayConfig(
+        source=str(crewday_raw.get("source", "mock")),
+        base_url=crewday_base_url,
+        api_token=os.environ.get("CREWDAY_API_TOKEN")
+        or decrypt_secret(crewday_raw.get("api_token")),
+        workspace_slug=crewday_workspace_slug,
         workspace_id=crewday_raw.get("workspace_id"),
         verify_tls=_parse_bool(
             os.environ.get("CREWDAY_VERIFY_TLS", crewday_raw.get("verify_tls")),
@@ -435,9 +441,28 @@ def validate_printer_config(printer: PrinterConfig) -> None:
 def validate_crewday_config(crewday: CrewdayConfig) -> None:
     if crewday.source not in {"mock", "crewday_http"}:
         raise ValueError(f"unsupported crewday.source: {crewday.source}")
-    parsed = urlparse(crewday.base_url)
+    parsed = urlsplit(crewday.base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("crewday.base_url must be an absolute http:// or https:// URL")
+
+
+def normalize_crewday_connection(
+    base_url: object,
+    workspace_slug: object = None,
+) -> tuple[str, str | None]:
+    raw_url = str(base_url or "http://crewday:8000").strip()
+    parsed = urlsplit(raw_url)
+    normalized_url = urlunsplit((parsed.scheme, parsed.netloc, "", "", "")).rstrip("/")
+    explicit_slug = str(workspace_slug).strip() if workspace_slug else ""
+    inferred_slug = _crewday_slug_from_path(parsed.path)
+    return normalized_url, explicit_slug or inferred_slug
+
+
+def _crewday_slug_from_path(path: str) -> str | None:
+    segments = [unquote(segment) for segment in path.split("/") if segment]
+    if len(segments) >= 2 and segments[0] == "w":
+        return segments[1] or None
+    return None
 
 
 def validate_timezone(timezone: str) -> None:

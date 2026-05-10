@@ -229,7 +229,6 @@
 <section class="panel">
   {% call panel_head("Printers", "Configured printers") %}
   {% endcall %}
-  <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Each printer can be calibrated and tested on its own detail page.</p>
 
   {% if config.printers %}
     <div class="printer-list">
@@ -309,21 +308,24 @@
       <span class="chip chip--sand"><span class="dot dot--sand"></span>key missing</span>
     {% endif %}
   {% endcall %}
-  <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Crewday v1 uses workspace-scoped routes under <code>/w/&lt;slug&gt;/api/v1</code> and bearer API tokens.</p>
 
   <div class="form">
-    <div class="form__row">
+    <div class="form__row form__row--two">
       <label class="field">
         <span class="field__label">Source</span>
         <select class="input" name="source" required>
-          <option value="mock" {% if config.crewday.source == "mock" %}selected{% endif %}>Mock fallback</option>
           <option value="crewday_http" {% if config.crewday.source == "crewday_http" %}selected{% endif %}>Crewday HTTP API</option>
+          <option value="mock" {% if config.crewday.source == "mock" %}selected{% endif %}>Offline sample tasks</option>
         </select>
       </label>
       <label class="field">
         <span class="field__label">Base URL</span>
-        <input class="input input--mono" name="base_url" value="{{ config.crewday.base_url }}" placeholder="http://crewday:8000" required>
-        <span class="field__hint">Include http:// or https://, without /w/&lt;slug&gt;/api/v1.</span>
+        <input class="input input--mono" name="base_url" value="{{ config.crewday.base_url }}" placeholder="https://app.crew.day" required>
+        <span class="field__hint">eg. https://app.crew.day</span>
+      </label>
+      <label class="check check--field">
+        <input name="verify_tls" type="checkbox" {% if config.crewday.verify_tls %}checked{% endif %}>
+        <span>Verify HTTPS certificates</span>
       </label>
       <label class="field">
         <span class="field__label">Workspace slug</span>
@@ -335,10 +337,6 @@
       <span class="field__label">API token</span>
       <input class="input input--mono" name="api_token" type="password" autocomplete="new-password" placeholder="{% if config.crewday.api_token %}Stored encrypted; leave blank to keep{% else %}mip_...{% endif %}">
       <span class="field__hint">Workspace tokens and personal access tokens are both accepted. Stored encrypted when PRINTER_CONFIG_SECRET_KEY is set.</span>
-    </label>
-    <label class="check">
-      <input name="verify_tls" type="checkbox" {% if config.crewday.verify_tls %}checked{% endif %}>
-      <span>Verify HTTPS certificates</span>
     </label>
   </div>
 
@@ -353,7 +351,6 @@
 <form class="panel" method="post" action="/workers">
   {% call panel_head("Workers", "Print roster") %}
   {% endcall %}
-  <p class="panel__sub" style="margin-top:-0.5rem;margin-bottom:0.75rem;">Enable Crewday workers and choose which printer outputs their receipt.</p>
 
   {% if crewday_worker_error %}
     <p class="field__hint">Crewday roster could not be loaded: {{ crewday_worker_error }}. Showing saved config rows.</p>

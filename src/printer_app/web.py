@@ -37,6 +37,7 @@ from printer_app.config import (
     default_receipt_template,
     default_usb_printer_raw,
     load_config,
+    normalize_crewday_connection,
     parse_receipt_template,
     write_raw_config,
 )
@@ -546,11 +547,15 @@ def save_crewday(
 ) -> RedirectResponse:
     config = load_config(config_path_from_env())
     raw = config_to_raw(config)
+    crewday_base_url, crewday_workspace_slug = normalize_crewday_connection(
+        base_url,
+        workspace_slug,
+    )
     raw["crewday"] = {
         **(raw.get("crewday") or {}),
         "source": source,
-        "base_url": base_url.strip().rstrip("/") or "http://crewday:8000",
-        "workspace_slug": workspace_slug.strip() or None,
+        "base_url": crewday_base_url,
+        "workspace_slug": crewday_workspace_slug,
         "workspace_id": None,
         "verify_tls": verify_tls == "on",
     }

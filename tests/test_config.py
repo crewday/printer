@@ -19,7 +19,7 @@ def test_ensure_config_creates_yaml(tmp_path: Path) -> None:
     assert config.printers[0].image_logo is True
     assert config.printers[0].supports_print_density is True
     assert config.printers[0].supports_print_speed is True
-    assert config.crewday.source == "mock"
+    assert config.crewday.source == "crewday_http"
     assert config.crewday.workspace_slug is None
     assert config.crewday.verify_tls is True
     assert config.print_schedule.cron == ""
@@ -101,6 +101,37 @@ workers:
 
     assert config.crewday.base_url == "https://crewday.example"
     assert config.crewday.verify_tls is False
+
+
+def test_load_config_normalizes_crewday_base_url_and_infers_slug(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "printer.yaml"
+    path.write_text(
+        """
+ui:
+  username: admin
+crewday:
+  source: crewday_http
+  base_url: https://app.crew.day/w/villa-sud/api/v1/?ignored=true#fragment
+printers:
+  - name: Default
+    type: network_escpos
+    profile: epson_tm_t20ii
+    host: 127.0.0.1
+    port: 9100
+    timeout_seconds: 5
+workers:
+  - name: Amina
+    crewday_user_id: 01HXUSER
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(path)
+
+    assert config.crewday.base_url == "https://app.crew.day"
+    assert config.crewday.workspace_slug == "villa-sud"
 
 
 def test_load_config_parses_string_booleans(tmp_path: Path) -> None:

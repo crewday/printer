@@ -389,6 +389,37 @@ def test_save_crewday_persists_workspace_slug_and_encrypted_token(
     assert reloaded.crewday.verify_tls is True
 
 
+def test_save_crewday_normalizes_pasted_scoped_url(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = tmp_path / "printer.yaml"
+    _write_config(config_path)
+    monkeypatch.setenv("PRINTER_CONFIG", str(config_path))
+    monkeypatch.setenv("PRINTER_UI_PASSWORD", "admin")
+
+    client = TestClient(web.app)
+    response = client.post(
+        "/crewday",
+        data={
+            "source": "crewday_http",
+            "base_url": "https://app.crew.day/w/villa-sud/api/v1/",
+            "workspace_slug": "",
+            "verify_tls": "on",
+        },
+        auth=("admin", "admin"),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+
+    from printer_app.config import load_config
+
+    reloaded = load_config(config_path)
+    assert reloaded.crewday.base_url == "https://app.crew.day"
+    assert reloaded.crewday.workspace_slug == "villa-sud"
+
+
 def test_save_access_encrypts_configured_login(tmp_path: Path, monkeypatch) -> None:
     config_path = tmp_path / "printer.yaml"
     _write_config(config_path)
