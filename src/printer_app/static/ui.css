@@ -1239,7 +1239,6 @@ select {
   flex-wrap: wrap;
   gap: 12px;
   padding-top: 8px;
-  border-top: 1px dashed var(--line-strong);
 }
 .composer__status {
   font-size: 12.5px;

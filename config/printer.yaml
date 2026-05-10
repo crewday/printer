@@ -7,6 +7,7 @@ crewday:
   api_token: null
   workspace_slug: null
   workspace_id: null
+  verify_tls: true
 print_schedule:
   cron: ''
 timezone: Asia/Dubai

@@ -55,6 +55,7 @@ class CrewdayConfig:
     api_token: str | None
     workspace_slug: str | None
     workspace_id: str | None
+    verify_tls: bool = True
 
 
 @dataclass(frozen=True)

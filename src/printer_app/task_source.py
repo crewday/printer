@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
+from urllib.parse import quote
 
 import httpx
 
@@ -72,47 +73,31 @@ class CrewdayHttpTaskSource:
         self._config = config
 
     def fetch_task_batch(self, worker: WorkerConfig, *, now: datetime) -> TaskBatch:
-        if not worker.crewday_user_id:
-            raise ValueError(
-                f"worker {worker.name!r} needs crewday_user_id for HTTP source"
-            )
-
         local_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         start = local_start.astimezone(UTC)
         end = (local_start + timedelta(days=1)).astimezone(UTC)
-        headers = {}
-        if self._config.crewday.api_token:
-            headers["Authorization"] = f"Bearer {self._config.crewday.api_token}"
         params = {
-            "assignee_user_id": worker.crewday_user_id,
             "scheduled_for_utc_gte": start.isoformat(),
             "scheduled_for_utc_lt": end.isoformat(),
-            "limit": "100",
+            "limit": "500",
         }
-        task_path = "/api/v1/tasks"
-        if self._config.crewday.workspace_slug:
-            task_path = f"/w/{self._config.crewday.workspace_slug}/api/v1/tasks"
-        with httpx.Client(base_url=self._config.crewday.base_url, timeout=10) as client:
-            response = client.get(task_path, params=params, headers=headers)
-            response.raise_for_status()
-            payload = response.json()
-        rows = _rows(payload)
+        if worker.crewday_user_id:
+            params["assignee_user_id"] = worker.crewday_user_id
+
+        with self._client() as client:
+            rows = self._fetch_task_rows(client, params)
         return TaskBatch(
             worker_name=worker.name,
             source_label="Crewday",
             generated_at=now,
-            tasks=tuple(_task_from_crewday(row, now) for row in rows),
+            tasks=tuple(self._task_from_row(row, now) for row in rows),
         )
 
     def fetch_workers(self) -> tuple[CrewdayWorker, ...]:
-        headers = {}
-        if self._config.crewday.api_token:
-            headers["Authorization"] = f"Bearer {self._config.crewday.api_token}"
-
-        with httpx.Client(base_url=self._config.crewday.base_url, timeout=10) as client:
+        with self._client() as client:
             for path in self._worker_paths():
-                response = client.get(path, headers=headers)
-                if response.status_code == 404:
+                response = client.get(path, headers=self._headers())
+                if response.status_code in {401, 403, 404}:
                     continue
                 response.raise_for_status()
                 return tuple(
@@ -120,13 +105,81 @@ class CrewdayHttpTaskSource:
                 )
         return ()
 
+    def _client(self) -> httpx.Client:
+        return httpx.Client(
+            base_url=self._config.crewday.base_url,
+            timeout=10,
+            verify=self._config.crewday.verify_tls,
+        )
+
+    def _headers(self) -> dict[str, str]:
+        if not self._config.crewday.api_token:
+            return {}
+        return {"Authorization": f"Bearer {self._config.crewday.api_token}"}
+
+    def _fetch_task_rows(
+        self,
+        client: httpx.Client,
+        params: dict[str, str],
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            request_params = dict(params)
+            if cursor:
+                request_params["cursor"] = cursor
+            response = client.get(
+                self._task_path(),
+                params=request_params,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            rows.extend(_rows(payload))
+            if not isinstance(payload, dict) or not payload.get("has_more"):
+                return rows
+            next_cursor = payload.get("next_cursor")
+            cursor = str(next_cursor) if next_cursor else None
+            if cursor is None:
+                return rows
+
+    def _task_path(self) -> str:
+        prefix = self._api_prefix()
+        return f"{prefix}/tasks"
+
+    def _task_detail_path(self, task_id: str) -> str:
+        prefix = self._api_prefix()
+        return f"{prefix}/tasks/{quote(task_id, safe='')}/detail"
+
     def _worker_paths(self) -> tuple[str, ...]:
-        prefix = ""
-        if self._config.crewday.workspace_slug:
-            prefix = f"/w/{self._config.crewday.workspace_slug}/api/v1"
-        else:
-            prefix = "/api/v1"
+        prefix = self._api_prefix()
         return (f"{prefix}/employees", f"{prefix}/users")
+
+    def _api_prefix(self) -> str:
+        if self._config.crewday.workspace_slug:
+            slug = quote(self._config.crewday.workspace_slug, safe="")
+            return f"/w/{slug}/api/v1"
+        return "/api/v1"
+
+    def _task_from_row(self, row: dict[str, Any], now: datetime) -> ReceiptTask:
+        task_id = str(row.get("id", ""))
+        detail = self._fetch_task_detail(task_id) if task_id else None
+        return _task_from_crewday(row, now, detail=detail)
+
+    def _fetch_task_detail(self, task_id: str) -> dict[str, Any] | None:
+        try:
+            with self._client() as client:
+                response = client.get(
+                    self._task_detail_path(task_id),
+                    headers=self._headers(),
+                )
+                if response.status_code in {401, 403, 404}:
+                    return None
+                response.raise_for_status()
+                payload = response.json()
+        except httpx.HTTPError, ValueError:
+            return None
+        return payload if isinstance(payload, dict) else None
 
 
 def fetch_crewday_workers(config: AppConfig) -> tuple[CrewdayWorker, ...]:
@@ -138,29 +191,50 @@ def fetch_crewday_workers(config: AppConfig) -> tuple[CrewdayWorker, ...]:
     )
 
 
-def _task_from_crewday(row: dict[str, Any], now: datetime) -> ReceiptTask:
-    scheduled = row.get("scheduled_for_utc") or row.get("scheduled_start")
+def _task_from_crewday(
+    row: dict[str, Any],
+    now: datetime,
+    *,
+    detail: dict[str, Any] | None = None,
+) -> ReceiptTask:
+    task_row = row
+    if isinstance(detail, dict) and isinstance(detail.get("task"), dict):
+        task_row = {**row, **detail["task"]}
+
+    scheduled = task_row.get("scheduled_for_utc") or task_row.get("scheduled_start")
     scheduled_dt = None
     if isinstance(scheduled, str):
         scheduled_dt = datetime.fromisoformat(scheduled.replace("Z", "+00:00"))
         if scheduled_dt.tzinfo is not None and now.tzinfo is not None:
             scheduled_dt = scheduled_dt.astimezone(now.tzinfo)
 
-    checklist_raw = row.get("checklist") or row.get("checklist_items") or []
+    detail_checklist = detail.get("checklist") if isinstance(detail, dict) else None
+    checklist_raw = (
+        detail_checklist
+        or task_row.get("checklist")
+        or task_row.get("checklist_items")
+        or []
+    )
     checklist = tuple(
         str(item.get("label") or item.get("text") or item) for item in checklist_raw
     )
+    property_payload = detail.get("property") if isinstance(detail, dict) else None
+    property_name = task_row.get("property_name") or task_row.get("property")
+    if isinstance(property_payload, dict):
+        property_name = property_payload.get("name") or property_name
     return ReceiptTask(
-        id=str(row.get("id", "")),
-        title=str(row.get("title", "Untitled task")),
-        property_name=row.get("property_name") or row.get("property"),
-        area=row.get("area") or row.get("area_id"),
+        id=str(task_row.get("id", "")),
+        title=str(task_row.get("title", "Untitled task")),
+        property_name=property_name,
+        area=task_row.get("area") or task_row.get("area_id"),
         scheduled_start=scheduled_dt,
-        time_window=row.get("time_window_local"),
-        duration_minutes=row.get("duration_minutes") or row.get("estimated_minutes"),
-        priority=str(row.get("priority", "normal")),
-        status=str(row.get("state") or row.get("status") or "pending"),
-        photo_required=(row.get("photo_evidence") == "required"),
+        time_window=task_row.get("time_window_local"),
+        duration_minutes=task_row.get("duration_minutes")
+        or task_row.get("estimated_minutes"),
+        priority=str(task_row.get("priority", "normal")),
+        status=str(task_row.get("state") or task_row.get("status") or "pending"),
+        photo_required=str(task_row.get("photo_evidence", "")).lower()
+        in {"required", "require"},
         checklist=checklist,
     )
 

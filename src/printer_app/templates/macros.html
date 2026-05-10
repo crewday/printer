@@ -323,7 +323,7 @@
       <label class="field">
         <span class="field__label">Base URL</span>
         <input class="input input--mono" name="base_url" value="{{ config.crewday.base_url }}" placeholder="http://crewday:8000" required>
-        <span class="field__hint">Host only, without /w/&lt;slug&gt;/api/v1.</span>
+        <span class="field__hint">Include http:// or https://, without /w/&lt;slug&gt;/api/v1.</span>
       </label>
       <label class="field">
         <span class="field__label">Workspace slug</span>
@@ -334,7 +334,11 @@
     <label class="field">
       <span class="field__label">API token</span>
       <input class="input input--mono" name="api_token" type="password" autocomplete="new-password" placeholder="{% if config.crewday.api_token %}Stored encrypted; leave blank to keep{% else %}mip_...{% endif %}">
-      <span class="field__hint">Create a workspace token in Crewday with task read access. Stored encrypted when PRINTER_CONFIG_SECRET_KEY is set.</span>
+      <span class="field__hint">Workspace tokens and personal access tokens are both accepted. Stored encrypted when PRINTER_CONFIG_SECRET_KEY is set.</span>
+    </label>
+    <label class="check">
+      <input name="verify_tls" type="checkbox" {% if config.crewday.verify_tls %}checked{% endif %}>
+      <span>Verify HTTPS certificates</span>
     </label>
   </div>
 

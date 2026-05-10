@@ -366,6 +366,7 @@ def test_save_crewday_persists_workspace_slug_and_encrypted_token(
             "source": "crewday_http",
             "base_url": "http://crewday:8000/",
             "workspace_slug": "villa-sud",
+            "verify_tls": "on",
             "api_token": "mip_key_secret",
         },
         auth=("admin", "admin"),
@@ -377,6 +378,7 @@ def test_save_crewday_persists_workspace_slug_and_encrypted_token(
     assert stored["crewday"]["source"] == "crewday_http"
     assert stored["crewday"]["base_url"] == "http://crewday:8000"
     assert stored["crewday"]["workspace_slug"] == "villa-sud"
+    assert stored["crewday"]["verify_tls"] is True
     assert stored["crewday"]["api_token"].startswith("enc:v1:")
 
     from printer_app.config import load_config
@@ -384,6 +386,7 @@ def test_save_crewday_persists_workspace_slug_and_encrypted_token(
     reloaded = load_config(config_path)
     assert reloaded.crewday.api_token == "mip_key_secret"
     assert reloaded.crewday.workspace_slug == "villa-sud"
+    assert reloaded.crewday.verify_tls is True
 
 
 def test_save_access_encrypts_configured_login(tmp_path: Path, monkeypatch) -> None:

@@ -5,6 +5,7 @@ import tempfile
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yaml
@@ -113,10 +114,14 @@ def default_config() -> dict[str, Any]:
         },
         "crewday": {
             "source": "mock",
-            "base_url": "http://crewday:8000",
+            "base_url": os.environ.get("CREWDAY_BASE_URL", "http://crewday:8000"),
             "api_token": crewday_token,
-            "workspace_slug": None,
+            "workspace_slug": os.environ.get("CREWDAY_WORKSPACE_SLUG"),
             "workspace_id": None,
+            "verify_tls": _parse_bool(
+                os.environ.get("CREWDAY_VERIFY_TLS"),
+                default=True,
+            ),
         },
         "print_schedule": {
             "cron": "",
@@ -176,13 +181,22 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     )
     crewday = CrewdayConfig(
         source=str(crewday_raw.get("source", "mock")),
-        base_url=str(crewday_raw.get("base_url", "http://crewday:8000")).rstrip("/"),
+        base_url=str(
+            os.environ.get("CREWDAY_BASE_URL")
+            or crewday_raw.get("base_url", "http://crewday:8000")
+        ).rstrip("/"),
         api_token=os.environ.get("CREWDAY_API_TOKEN")
         or decrypt_secret(crewday_raw.get("api_token")),
-        workspace_slug=crewday_raw.get("workspace_slug")
+        workspace_slug=os.environ.get("CREWDAY_WORKSPACE_SLUG")
+        or crewday_raw.get("workspace_slug")
         or crewday_raw.get("workspace_id"),
         workspace_id=crewday_raw.get("workspace_id"),
+        verify_tls=_parse_bool(
+            os.environ.get("CREWDAY_VERIFY_TLS", crewday_raw.get("verify_tls")),
+            default=True,
+        ),
     )
+    validate_crewday_config(crewday)
     print_schedule = PrintScheduleConfig(
         cron=str(print_schedule_raw.get("cron", "")).strip(),
     )
@@ -416,6 +430,14 @@ def validate_printer_config(printer: PrinterConfig) -> None:
         raise ValueError("printer.print_density must be between 0 and 255")
     if not 0 <= printer.print_speed <= 17:
         raise ValueError("printer.print_speed must be between 0 and 17")
+
+
+def validate_crewday_config(crewday: CrewdayConfig) -> None:
+    if crewday.source not in {"mock", "crewday_http"}:
+        raise ValueError(f"unsupported crewday.source: {crewday.source}")
+    parsed = urlparse(crewday.base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("crewday.base_url must be an absolute http:// or https:// URL")
 
 
 def validate_timezone(timezone: str) -> None:

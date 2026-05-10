@@ -541,6 +541,7 @@ def save_crewday(
     source: Annotated[str, Form()],
     base_url: Annotated[str, Form()],
     workspace_slug: Annotated[str, Form()] = "",
+    verify_tls: Annotated[str | None, Form()] = None,
     api_token: Annotated[str, Form()] = "",
 ) -> RedirectResponse:
     config = load_config(config_path_from_env())
@@ -551,6 +552,7 @@ def save_crewday(
         "base_url": base_url.strip().rstrip("/") or "http://crewday:8000",
         "workspace_slug": workspace_slug.strip() or None,
         "workspace_id": None,
+        "verify_tls": verify_tls == "on",
     }
     if api_token.strip():
         raw["crewday"]["api_token"] = api_token.strip()
