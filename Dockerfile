@@ -1,4 +1,4 @@
-FROM python:3.14.4-slim
+FROM python:3.14.4-slim-trixie
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.8 /uv /uvx /bin/
 
@@ -23,6 +23,8 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        libcairo2 libusb-1.0-0 cups cups-client \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ghostscript)" \
+       ge '10.05.1~dfsg-1+deb13u2' \
     && rm -rf /var/lib/apt/lists/*
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
